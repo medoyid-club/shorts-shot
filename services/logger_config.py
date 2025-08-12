@@ -115,11 +115,24 @@ def log_config_info(config: dict):
     logger = logging.getLogger("config")
     
     logger.info("⚙️ Конфигурация бота:")
-    logger.info(f"   Модель LLM: {config.get('LLM', {}).get('gemini_model', 'N/A')}")
-    logger.info(f"   Длительность видео: {config.get('VIDEO', {}).get('duration_seconds', 'N/A')}с")
-    logger.info(f"   Размер видео: {config.get('VIDEO', {}).get('width', 'N/A')}x{config.get('VIDEO', {}).get('height', 'N/A')}")
-    logger.info(f"   YouTube категория: {config.get('YOUTUBE', {}).get('category_id', 'N/A')}")
-    logger.info(f"   YouTube статус: {config.get('YOUTUBE', {}).get('privacy_status', 'N/A')}")
+    
+    # Безопасное получение значений из ConfigParser
+    try:
+        llm_model = config['LLM']['gemini_model'] if 'LLM' in config and 'gemini_model' in config['LLM'] else 'N/A'
+        video_duration = config['VIDEO']['duration_seconds'] if 'VIDEO' in config and 'duration_seconds' in config['VIDEO'] else 'N/A'
+        video_width = config['VIDEO']['width'] if 'VIDEO' in config and 'width' in config['VIDEO'] else 'N/A'
+        video_height = config['VIDEO']['height'] if 'VIDEO' in config and 'height' in config['VIDEO'] else 'N/A'
+        youtube_category = config['YOUTUBE']['category_id'] if 'YOUTUBE' in config and 'category_id' in config['YOUTUBE'] else 'N/A'
+        youtube_privacy = config['YOUTUBE']['privacy_status'] if 'YOUTUBE' in config and 'privacy_status' in config['YOUTUBE'] else 'N/A'
+        
+        logger.info(f"   Модель LLM: {llm_model}")
+        logger.info(f"   Длительность видео: {video_duration}с")
+        logger.info(f"   Размер видео: {video_width}x{video_height}")
+        logger.info(f"   YouTube категория: {youtube_category}")
+        logger.info(f"   YouTube статус: {youtube_privacy}")
+        
+    except Exception as e:
+        logger.warning(f"⚠️ Ошибка чтения конфигурации для лога: {e}")
 
 
 def create_log_viewer_script():
