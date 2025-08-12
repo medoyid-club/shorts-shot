@@ -1,0 +1,17 @@
+[Unit]
+Description=Telegram to YouTube Shorts Bot
+After=network.target
+
+[Service]
+Type=simple
+User=dzianis
+WorkingDirectory=/home/dzianis/shorts-shot
+Environment=PATH=/home/dzianis/shorts-shot/.venv/bin
+ExecStart=/home/dzianis/shorts-shot/.venv/bin/python main_script.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

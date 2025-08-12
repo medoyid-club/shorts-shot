@@ -1,0 +1,34 @@
+# Проверка статуса
+sudo systemctl status telegram-shorts.service
+
+# Перезапуск сервиса
+sudo systemctl restart telegram-shorts.service
+
+# Остановка сервиса
+sudo systemctl stop telegram-shorts.service
+
+# Запуск сервиса
+sudo systemctl start telegram-shorts.service
+
+# Просмотр логов в реальном времени
+sudo journalctl -u telegram-shorts.service -f
+
+# Просмотр последних логов
+sudo journalctl -u telegram-shorts.service --lines=50
+
+# Проверка VPN статуса
+expressvpn status
+
+# Просмотр логов
+./view_logs.sh live     # В реальном времени
+./view_logs.sh errors   # Только ошибки
+./view_logs.sh today    # За сегодня
+./view_logs.sh last     # Последние 100 строк
+
+# Управление ботом  
+./deploy/update_bot.sh update    # Обновить с git
+./deploy/update_bot.sh status    # Статус бота
+./deploy/update_bot.sh restart   # Перезапуск
+./deploy/update_bot.sh logs      # Логи systemd
+./deploy/update_bot.sh backup    # Создать бэкап
+./deploy/update_bot.sh rollback  # Откат к бэкапу

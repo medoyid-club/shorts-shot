@@ -9,12 +9,7 @@ from services.telegram_monitor import start_telegram_watcher
 from services.video_generator import VideoComposer
 from services.youtube_uploader import YouTubeUploader
 from services.storage import ensure_directories
-
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='[%(asctime)s] %(levelname)s %(name)s: %(message)s'
-)
+from services.logger_config import setup_logging, log_system_info, log_config_info, create_log_viewer_script
 logger = logging.getLogger("main")
 
 
@@ -140,19 +135,31 @@ async def process_message(text: str | None, media_path: str | None, config: dict
 async def main():
     project_root = Path(__file__).parent
     os.chdir(project_root)
+    
+    # Настройка логирования
+    setup_logging(log_dir="logs", log_level="INFO")
+    create_log_viewer_script()
+    
+    # Логируем информацию о системе
+    log_system_info()
+    
     config = load_config(project_root)
+    
+    # Логируем конфигурацию
+    log_config_info(config)
+    
     ensure_directories(config)
 
     composer = VideoComposer(config)
     uploader = YouTubeUploader(config)
 
-    logger.info("Starting Telegram watcher...")
+    logger.info("🚀 Starting Telegram watcher...")
 
     async def handler(text: str | None, media_path: str | None):
         try:
             await process_message(text, media_path, config, uploader, composer)
         except Exception as e:
-            logger.exception("Failed to process message: %s", e)
+            logger.exception("❌ Failed to process message: %s", e)
 
     await start_telegram_watcher(config, handler)
 
@@ -161,5 +168,7 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("Stopped by user")
+        logger.info("🛑 Stopped by user")
+    except Exception as e:
+        logger.exception("💥 Fatal error: %s", e)
 
