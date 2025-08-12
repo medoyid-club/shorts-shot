@@ -50,13 +50,13 @@ class GeminiProvider:
             original_method = genai.models.Models.generate_content
             retried_method = retry.Retry(
                 predicate=is_retriable,
-                initial=2.0,    # начальная пауза 2 сек
-                maximum=60.0,   # максимальная пауза 60 сек
+                initial=1.0,    # начальная пауза 1 сек
+                maximum=30.0,   # максимальная пауза 30 сек
                 multiplier=2.0, # экспоненциальное увеличение
-                deadline=300.0  # общий timeout 5 минут
+                deadline=60.0   # общий timeout 1 минута
             )(original_method)
             genai.models.Models.generate_content = retried_method
-            logger.info("✅ Retry настроен для Gemini API")
+            logger.info("✅ Retry настроен для Gemini API (timeout: 60s)")
 
     def _get_client(self) -> genai.Client:
         if not self.current_api_key:
@@ -74,19 +74,39 @@ class GeminiProvider:
     
     async def _generate_with_fallback(self, prompt: str) -> str:
         """Генерация с fallback на резервный API при ошибках квоты"""
+        logger.info("🤖 Начинаем генерацию с Gemini API...")
+        
         for attempt in range(2):  # Максимум 2 попытки
             try:
                 client = self._get_client()
-                resp = await asyncio.to_thread(
-                    client.models.generate_content,
-                    model=self.model,
-                    contents=prompt,
+                logger.info(f"📡 Отправляем запрос к Gemini (попытка {attempt + 1}/2)...")
+                
+                # Добавляем timeout для каждого отдельного запроса
+                resp = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        client.models.generate_content,
+                        model=self.model,
+                        contents=prompt,
+                    ),
+                    timeout=45.0  # 45 секунд на один запрос
                 )
-                return getattr(resp, 'text', str(resp))
+                
+                result = getattr(resp, 'text', str(resp))
+                logger.info("✅ Получен ответ от Gemini API")
+                return result
+                
+            except asyncio.TimeoutError:
+                logger.error(f"⏰ Timeout при запросе к Gemini API (попытка {attempt + 1})")
+                if attempt == 0 and self._switch_to_backup():
+                    logger.info("💫 Повторяем запрос с резервным API ключом...")
+                    continue
+                    
             except Exception as e:
                 error_msg = str(e)
                 is_quota_error = ('429' in error_msg or 'quota' in error_msg.lower() or 
                                 'RESOURCE_EXHAUSTED' in error_msg)
+                
+                logger.error(f"❌ Ошибка генерации (попытка {attempt + 1}): {e}")
                 
                 if is_quota_error and attempt == 0:
                     if self._switch_to_backup():
@@ -95,7 +115,6 @@ class GeminiProvider:
                     else:
                         logger.error("❌ Нет резервного API ключа для fallback")
                 
-                logger.error(f"❌ Ошибка генерации (попытка {attempt + 1}): {e}")
                 if attempt == 1:  # Последняя попытка
                     raise
             
