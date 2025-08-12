@@ -1,0 +1,23 @@
+[Unit]
+Description=Telegram to YouTube Shorts Bot
+After=network.target
+
+[Service]
+Type=simple
+User=botuser
+WorkingDirectory=/home/botuser/Telegram-to-YouTube-Shorts
+Environment=PATH=/home/botuser/Telegram-to-YouTube-Shorts/.venv/bin
+ExecStart=/home/botuser/Telegram-to-YouTube-Shorts/.venv/bin/python main_script.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/botuser/Telegram-to-YouTube-Shorts
+
+[Install]
+WantedBy=multi-user.target

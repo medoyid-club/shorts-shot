@@ -1,0 +1,20 @@
+# Core dependencies
+telethon>=1.36.0
+moviepy>=1.0.3
+Pillow>=10.3.0
+imageio-ffmpeg>=0.4.9
+
+# Google APIs
+google-api-python-client>=2.130.0
+google-auth>=2.31.0
+google-auth-oauthlib>=1.2.0
+google-auth-httplib2>=0.2.0
+google-genai>=0.6.0
+
+# Utilities
+python-dotenv>=1.0.1
+tenacity>=8.5.0
+numpy>=1.24.0
+
+# Optional: For advanced features (if needed)
+# playwright>=1.40.0  # Only if using HTML rendering
