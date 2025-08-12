@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Dict
 
 from google import genai
+from google.api_core import retry
 
 logger = logging.getLogger("llm")
 
@@ -16,8 +17,11 @@ logger = logging.getLogger("llm")
 # SAFETY_SETTINGS = None
 
 def create_llm_provider(config: dict) -> "GeminiProvider":
+    primary_key = os.getenv('GEMINI_API_KEY', '')
+    backup_key = os.getenv('GEMINI_API_KEY_BACKUP', '')
     return GeminiProvider(
-        api_key=os.getenv('GEMINI_API_KEY', ''),
+        api_key=primary_key,
+        backup_api_key=backup_key,
         model=config['LLM'].get('gemini_model', 'gemini-2.0-flash')
     )
 
@@ -25,13 +29,77 @@ def create_llm_provider(config: dict) -> "GeminiProvider":
 @dataclass
 class GeminiProvider:
     api_key: str
+    backup_api_key: str = ''
     model: str = 'gemini-2.0-flash'
+    current_api_key: str = ''  # Текущий используемый ключ
+    
+    def __post_init__(self):
+        self.current_api_key = self.api_key
+        # Настройка retry для Gemini API
+        self._setup_retry()
+    
+    def _setup_retry(self):
+        """Настройка автоматических повторов для Gemini API"""
+        def is_retriable(exception):
+            if hasattr(exception, 'code'):
+                return exception.code in {429, 503}  # Quota exceeded, Service unavailable
+            return False
+        
+        # Применяем retry к методу generate_content
+        if hasattr(genai.models.Models, 'generate_content'):
+            original_method = genai.models.Models.generate_content
+            retried_method = retry.Retry(
+                predicate=is_retriable,
+                initial=2.0,    # начальная пауза 2 сек
+                maximum=60.0,   # максимальная пауза 60 сек
+                multiplier=2.0, # экспоненциальное увеличение
+                deadline=300.0  # общий timeout 5 минут
+            )(original_method)
+            genai.models.Models.generate_content = retried_method
+            logger.info("✅ Retry настроен для Gemini API")
 
     def _get_client(self) -> genai.Client:
-        if not self.api_key:
+        if not self.current_api_key:
             raise RuntimeError("GEMINI_API_KEY is not set in the environment")
         
-        return genai.Client(api_key=self.api_key)
+        return genai.Client(api_key=self.current_api_key)
+    
+    def _switch_to_backup(self) -> bool:
+        """Переключение на резервный API ключ"""
+        if self.backup_api_key and self.current_api_key != self.backup_api_key:
+            logger.warning("🔄 Переключаемся на резервный Gemini API ключ")
+            self.current_api_key = self.backup_api_key
+            return True
+        return False
+    
+    async def _generate_with_fallback(self, prompt: str) -> str:
+        """Генерация с fallback на резервный API при ошибках квоты"""
+        for attempt in range(2):  # Максимум 2 попытки
+            try:
+                client = self._get_client()
+                resp = await asyncio.to_thread(
+                    client.models.generate_content,
+                    model=self.model,
+                    contents=prompt,
+                )
+                return getattr(resp, 'text', str(resp))
+            except Exception as e:
+                error_msg = str(e)
+                is_quota_error = ('429' in error_msg or 'quota' in error_msg.lower() or 
+                                'RESOURCE_EXHAUSTED' in error_msg)
+                
+                if is_quota_error and attempt == 0:
+                    if self._switch_to_backup():
+                        logger.info("💫 Повторяем запрос с резервным API ключом...")
+                        continue
+                    else:
+                        logger.error("❌ Нет резервного API ключа для fallback")
+                
+                logger.error(f"❌ Ошибка генерации (попытка {attempt + 1}): {e}")
+                if attempt == 1:  # Последняя попытка
+                    raise
+            
+        return ""
 
     def _strip(self, text: str) -> str:
         return (text or "").strip()
@@ -50,7 +118,6 @@ class GeminiProvider:
     async def _translate_to_uk(self, text: str) -> str:
         if not text:
             return ""
-        client = self._get_client()
         prompt = (
             "TASK: Translate to Ukrainian (modern, natural Ukrainian).\n\n"
             "RULES:\n"
@@ -64,17 +131,12 @@ class GeminiProvider:
             f"ENGLISH TEXT:\n{text}\n\n"
             "UKRAINIAN:"
         )
-        resp = await asyncio.to_thread(
-            client.models.generate_content,
-            model=self.model,
-            contents=prompt,
-        )
-        return self._strip(getattr(resp, 'text', str(resp)))
+        response_text = await self._generate_with_fallback(prompt)
+        return self._strip(response_text)
 
     async def _translate_tags_to_uk(self, tags: list[str]) -> list[str]:
         if not tags:
             return []
-        client = self._get_client()
         prompt = (
             "TASK: Translate YouTube tags to Ukrainian.\n\n"
             "RULES:\n"
@@ -87,12 +149,7 @@ class GeminiProvider:
             f"ENGLISH TAGS: {json.dumps(tags, ensure_ascii=False)}\n\n"
             "UKRAINIAN JSON:"
         )
-        resp = await asyncio.to_thread(
-            client.models.generate_content,
-            model=self.model,
-            contents=prompt,
-        )
-        raw = getattr(resp, 'text', None) or str(resp)
+        raw = await self._generate_with_fallback(prompt)
         try:
             data = json.loads(raw)
             if isinstance(data, list):
@@ -124,13 +181,8 @@ class GeminiProvider:
             f"SOURCE TEXT:\n{source_text}\n\n"
             "SUMMARY:"
         )
-        client = self._get_client()
-        resp_en = await asyncio.to_thread(
-            client.models.generate_content,
-            model=self.model,
-            contents=prompt_en,
-        )
-        summary_en = self._strip(getattr(resp_en, 'text', str(resp_en)))
+        summary_en = await self._generate_with_fallback(prompt_en)
+        summary_en = self._strip(summary_en)
         logger.info(f"🔍 LLM Summary EN: {summary_en}")
         # Step 2: переводим на украинский
         summary_uk = await self._translate_to_uk(summary_en)
@@ -170,13 +222,7 @@ class GeminiProvider:
             f"SOURCE TEXT:\n{source_text}\n\n"
             "JSON:"
         )
-        client = self._get_client()
-        resp = await asyncio.to_thread(
-            client.models.generate_content,
-            model=self.model,
-            contents=prompt_en,
-        )
-        raw = getattr(resp, 'text', None) or str(resp)
+        raw = await self._generate_with_fallback(prompt_en)
         logger.info(f"🔍 LLM SEO Raw Response: {raw}")
         data = _extract_json(raw)
         logger.info(f"🔍 LLM SEO Parsed JSON: {data}")

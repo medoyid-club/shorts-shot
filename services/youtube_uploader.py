@@ -12,6 +12,8 @@ from google.auth.transport.requests import Request
 import google.auth.exceptions
 import os
 import pickle
+import ssl
+import socket
 
 logger = logging.getLogger("youtube")
 
@@ -44,8 +46,23 @@ class YouTubeUploader:
                 creds = flow.run_local_server(port=0)
             with open(self.token_path, 'wb') as token:
                 pickle.dump(creds, token)
-        service = build('youtube', 'v3', credentials=creds)
-        return service
+        # Создаем YouTube service с улучшенными настройками для надежности
+        try:
+            service = build('youtube', 'v3', credentials=creds)
+            logger.info("✅ YouTube API service создан успешно")
+            return service
+        except Exception as e:
+            logger.warning(f"⚠️ Проблема создания YouTube service: {e}")
+            # Попробуем создать с настройками для обхода SSL проблем
+            import httplib2
+            http = httplib2.Http(
+                timeout=60,  # Увеличиваем timeout
+                disable_ssl_certificate_validation=False  # Оставляем проверку SSL
+            )
+            http = creds.authorize(http)
+            service = build('youtube', 'v3', http=http)
+            logger.info("✅ YouTube API service создан с custom HTTP client")
+            return service
 
     def upload_video(
         self,
@@ -67,15 +84,36 @@ class YouTubeUploader:
                 'privacyStatus': privacy_status,
             }
         }
-        media = MediaFileUpload(video_file, chunksize=-1, resumable=True)
+        # Используем chunked upload для больших файлов и надежности
+        media = MediaFileUpload(video_file, chunksize=1024*1024, resumable=True)  # 1MB chunks
         request = self.service.videos().insert(
             part=','.join(body.keys()),
             body=body,
             media_body=media
         )
         response = None
+        error_count = 0
+        max_retries = 3
+        
         while response is None:
-            status, response = request.next_chunk()
+            try:
+                status, response = request.next_chunk()
+                if status:
+                    logger.info(f"📤 Загружено {int(status.progress() * 100)}%")
+            except Exception as e:
+                error_count += 1
+                logger.warning(f"⚠️ Ошибка загрузки (попытка {error_count}/{max_retries}): {e}")
+                
+                if error_count >= max_retries:
+                    logger.error(f"❌ Превышено максимальное количество попыток загрузки")
+                    raise
+                
+                # Ждем перед повторной попыткой
+                import time
+                wait_time = 2 ** error_count  # exponential backoff
+                logger.info(f"⏳ Ожидание {wait_time} секунд перед повторной попыткой...")
+                time.sleep(wait_time)
+                
         logger.info("YouTube upload response: %s", response)
         return response
 

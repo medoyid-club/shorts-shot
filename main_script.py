@@ -119,7 +119,7 @@ async def process_message(text: str | None, media_path: str | None, config: dict
 
     video_path = await composer.compose(
         short_text=short_text,
-        header_media_path=media_path,
+        media_path=media_path,
         output_path=str(output_path),
         source_text=config['VIDEO'].get('source_text', 't.me/source')
     )

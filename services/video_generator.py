@@ -85,17 +85,23 @@ class VideoComposer:
                     if video_clip.duration > self.duration:
                         video_clip = video_clip.subclipped(0, self.duration)
                     
-                    # Масштабируем по высоте
-                    if video_clip.h != h:
-                        scale_factor = h / video_clip.h
-                        new_width = int(video_clip.w * scale_factor)
-                        video_clip = video_clip.resized((new_width, h))
-                        logger.info(f"🔄 Масштабировали до: {new_width}x{h}")
+                    # Масштабируем видео для заполнения header секции 
+                    # Выбираем масштаб чтобы заполнить всю область
+                    scale_factor_w = w / video_clip.w
+                    scale_factor_h = h / video_clip.h
+                    scale_factor = max(scale_factor_w, scale_factor_h)  # заполняем всю область
                     
-                    # Обрезаем по ширине (центрируем)
-                    if video_clip.w > w:
-                        x_center = video_clip.w / 2
-                        video_clip = video_clip.cropped(x1=x_center - w/2, x2=x_center + w/2)
+                    # Масштабируем
+                    scaled_w = int(video_clip.w * scale_factor)
+                    scaled_h = int(video_clip.h * scale_factor)
+                    video_clip = video_clip.resized((scaled_w, scaled_h))
+                    logger.info(f"🔄 Масштабировали до: {scaled_w}x{scaled_h}")
+                    
+                    # Обрезаем по центру если нужно
+                    if scaled_w > w or scaled_h > h:
+                        x_offset = max(0, (scaled_w - w) // 2)
+                        y_offset = max(0, (scaled_h - h) // 2)
+                        video_clip = video_clip.cropped(x1=x_offset, y1=y_offset, x2=x_offset + w, y2=y_offset + h)
                         logger.info(f"✂️ Обрезали до: {w}x{h}")
                     
                     # Устанавливаем нужную длительность
@@ -153,6 +159,8 @@ class VideoComposer:
             # Последний fallback - тёмно-синий вместо чёрного
             logger.warning("🔵 Используем синий фон как последний вариант")
             return self._add_header_effects(ColorClip(size=(w, h), color=(25, 25, 50)).with_duration(self.duration))
+
+
 
     def _render_text_image(self, text: str, size: Tuple[int, int], bg_rgb: tuple[int, int, int]) -> str:
         w, h = size
@@ -411,18 +419,16 @@ class VideoComposer:
         from moviepy import ImageSequenceClip
         return ImageSequenceClip(frames, fps=fps)
 
-    async def compose(self, short_text: str, header_media_path: str | None, output_path: str, source_text: str) -> str:
+    async def compose(self, short_text: str, media_path: str | None, output_path: str, source_text: str) -> str:
         header_h = int(self.height * self.header_ratio)
         middle_h = int(self.height * self.middle_ratio)
         footer_h = self.height - header_h - middle_h
 
-        header_clip = self._make_header_clip(header_media_path, (self.width, header_h))
+        # Правильная логика: медиа (включая видео) идет в header, текст в middle
+        header_clip = self._make_header_clip(media_path, (self.width, header_h))
 
         # Рендерим статическое изображение текста для максимальной читабельности
-        # (HTML-анимацию можно включить позже флагом настройки)
         middle_path = self._render_text_image(short_text, (self.width, middle_h), self.middle_bg)
-
-        # Используем статичное изображение без анимации для лучшей читабельности
         logger.info("🧩 Текст статичен (max readability)")
         middle_clip = ImageClip(middle_path).with_duration(self.duration)
 
