@@ -78,11 +78,23 @@ class GeminiProvider:
             (self.third_api_key, "третий")
         ]
         
+        # Диагностика
+        logger.info(f"🔍 Текущий ключ: {self.current_api_key[:10]}...")
+        logger.info(f"🔍 Использованные ключи: {[k[:10] + '...' for k in self.used_keys]}")
+        logger.info(f"🔍 Доступные ключи:")
+        for key, name in available_keys:
+            status = "✅" if key else "❌"
+            logger.info(f"   {status} {name}: {key[:10] + '...' if key else 'отсутствует'}")
+        
+        # Помечаем текущий ключ как использованный ПЕРЕД поиском нового
+        if self.current_api_key and self.current_api_key not in self.used_keys:
+            self.used_keys.append(self.current_api_key)
+            logger.info(f"🚫 Помечаем текущий ключ как использованный")
+        
         # Находим следующий неиспользованный ключ
         for key, name in available_keys:
-            if key and key != self.current_api_key and key not in self.used_keys:
+            if key and key not in self.used_keys:
                 logger.warning(f"🔄 Переключаемся на {name} Gemini API ключ")
-                self.used_keys.append(self.current_api_key)  # Помечаем текущий как использованный
                 self.current_api_key = key
                 return True
         
@@ -92,6 +104,11 @@ class GeminiProvider:
     async def _generate_with_fallback(self, prompt: str) -> str:
         """Генерация с fallback на резервный API при ошибках квоты"""
         logger.info("🤖 Начинаем генерацию с Gemini API...")
+        
+        # Сбрасываем список использованных ключей для нового запроса
+        self.used_keys = []
+        # Начинаем с основного ключа
+        self.current_api_key = self.api_key
         
         for attempt in range(3):  # Максимум 3 попытки (для 3-х ключей)
             try:
