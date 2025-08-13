@@ -19,6 +19,8 @@ async def process_message(text: str | None, media_path: str | None, config: dict
         text = "Новини"  # Fallback текст
 
     llm = create_llm_provider(config)
+    # Сбрасываем состояние API ключей для нового сообщения
+    llm.reset_for_new_message()
 
     # Task 2.1: Summarize for middle text
     try:
