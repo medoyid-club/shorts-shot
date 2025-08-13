@@ -19,9 +19,11 @@ logger = logging.getLogger("llm")
 def create_llm_provider(config: dict) -> "GeminiProvider":
     primary_key = os.getenv('GEMINI_API_KEY', '')
     backup_key = os.getenv('GEMINI_API_KEY_BACKUP', '')
+    third_key = os.getenv('GEMINI_API_KEY_OTHER_BACKUP', '')
     return GeminiProvider(
         api_key=primary_key,
         backup_api_key=backup_key,
+        third_api_key=third_key,
         model=config['LLM'].get('gemini_model', 'gemini-2.0-flash')
     )
 
@@ -30,11 +32,14 @@ def create_llm_provider(config: dict) -> "GeminiProvider":
 class GeminiProvider:
     api_key: str
     backup_api_key: str = ''
+    third_api_key: str = ''
     model: str = 'gemini-2.0-flash'
     current_api_key: str = ''  # Текущий используемый ключ
+    used_keys: list = None  # Список уже использованных ключей
     
     def __post_init__(self):
         self.current_api_key = self.api_key
+        self.used_keys = []  # Инициализируем список использованных ключей
         # Настройка retry для Gemini API
         self._setup_retry()
     
@@ -64,22 +69,34 @@ class GeminiProvider:
         
         return genai.Client(api_key=self.current_api_key)
     
-    def _switch_to_backup(self) -> bool:
-        """Переключение на резервный API ключ"""
-        if self.backup_api_key and self.current_api_key != self.backup_api_key:
-            logger.warning("🔄 Переключаемся на резервный Gemini API ключ")
-            self.current_api_key = self.backup_api_key
-            return True
+    def _switch_to_next_key(self) -> bool:
+        """Переключение на следующий доступный API ключ"""
+        # Список всех доступных ключей
+        available_keys = [
+            (self.api_key, "основной"),
+            (self.backup_api_key, "резервный"), 
+            (self.third_api_key, "третий")
+        ]
+        
+        # Находим следующий неиспользованный ключ
+        for key, name in available_keys:
+            if key and key != self.current_api_key and key not in self.used_keys:
+                logger.warning(f"🔄 Переключаемся на {name} Gemini API ключ")
+                self.used_keys.append(self.current_api_key)  # Помечаем текущий как использованный
+                self.current_api_key = key
+                return True
+        
+        logger.error("❌ Все API ключи исчерпаны!")
         return False
     
     async def _generate_with_fallback(self, prompt: str) -> str:
         """Генерация с fallback на резервный API при ошибках квоты"""
         logger.info("🤖 Начинаем генерацию с Gemini API...")
         
-        for attempt in range(2):  # Максимум 2 попытки
+        for attempt in range(3):  # Максимум 3 попытки (для 3-х ключей)
             try:
                 client = self._get_client()
-                logger.info(f"📡 Отправляем запрос к Gemini (попытка {attempt + 1}/2)...")
+                logger.info(f"📡 Отправляем запрос к Gemini (попытка {attempt + 1}/3)...")
                 
                 # Добавляем timeout для каждого отдельного запроса
                 resp = await asyncio.wait_for(
@@ -97,8 +114,8 @@ class GeminiProvider:
                 
             except asyncio.TimeoutError:
                 logger.error(f"⏰ Timeout при запросе к Gemini API (попытка {attempt + 1})")
-                if attempt == 0 and self._switch_to_backup():
-                    logger.info("💫 Повторяем запрос с резервным API ключом...")
+                if attempt < 2 and self._switch_to_next_key():
+                    logger.info("💫 Повторяем запрос с другим API ключом...")
                     continue
                     
             except Exception as e:
@@ -108,14 +125,14 @@ class GeminiProvider:
                 
                 logger.error(f"❌ Ошибка генерации (попытка {attempt + 1}): {e}")
                 
-                if is_quota_error and attempt == 0:
-                    if self._switch_to_backup():
-                        logger.info("💫 Повторяем запрос с резервным API ключом...")
+                if is_quota_error and attempt < 2:
+                    if self._switch_to_next_key():
+                        logger.info("💫 Повторяем запрос с другим API ключом...")
                         continue
                     else:
-                        logger.error("❌ Нет резервного API ключа для fallback")
+                        logger.error("❌ Нет больше доступных API ключей для fallback")
                 
-                if attempt == 1:  # Последняя попытка
+                if attempt == 2:  # Последняя попытка
                     raise
             
         return ""
