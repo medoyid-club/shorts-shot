@@ -8,12 +8,13 @@ from services.llm_provider import create_llm_provider
 from services.telegram_monitor import start_telegram_watcher
 from services.video_generator import VideoComposer
 from services.youtube_uploader import YouTubeUploader
+from services.twitter_uploader import TwitterUploader
 from services.storage import ensure_directories
 from services.logger_config import setup_logging, log_system_info, log_config_info, create_log_viewer_script
 logger = logging.getLogger("main")
 
 
-async def process_message(text: str | None, media_path: str | None, config: dict, uploader: YouTubeUploader, composer: VideoComposer):
+async def process_message(text: str | None, media_path: str | None, config: dict, uploader: YouTubeUploader, composer: VideoComposer, twitter: TwitterUploader = None):
     if not text:
         logger.info("Message has no text. Using default text for video.")
         text = "Новини"  # Fallback текст
@@ -131,7 +132,27 @@ async def process_message(text: str | None, media_path: str | None, config: dict
         category_id=config['YOUTUBE'].get('category_id', '25'),
         privacy_status=config['YOUTUBE'].get('privacy_status', 'public')
     )
-    logger.info("Upload complete")
+    logger.info("YouTube upload complete")
+    
+    # Step 5: Upload to Twitter (если включено)
+    if twitter and twitter.enabled:
+        try:
+            twitter_success = twitter.upload_post(
+                title=seo.get('title', 'News Update'),
+                description=seo.get('description', ''),
+                tags=seo.get('tags', []),
+                video_path=str(video_path)
+            )
+            if twitter_success:
+                logger.info("Twitter upload complete")
+            else:
+                logger.warning("Twitter upload failed")
+        except Exception as e:
+            logger.error(f"Twitter upload error: {e}")
+    else:
+        logger.info("Twitter upload skipped (disabled or not configured)")
+        
+    logger.info("All uploads complete")
 
 
 async def main():
@@ -154,12 +175,13 @@ async def main():
 
     composer = VideoComposer(config)
     uploader = YouTubeUploader(config)
+    twitter = TwitterUploader(config)
 
     logger.info("🚀 Starting Telegram watcher...")
 
     async def handler(text: str | None, media_path: str | None):
         try:
-            await process_message(text, media_path, config, uploader, composer)
+            await process_message(text, media_path, config, uploader, composer, twitter)
         except Exception as e:
             logger.exception("❌ Failed to process message: %s", e)
 

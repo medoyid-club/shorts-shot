@@ -111,12 +111,54 @@ class VideoComposer:
                     
                 else:
                     logger.info("🖼️ Обрабатываем изображение...")
-                    clip = ImageClip(media_path)
-                    clip = clip.resized(height=h)
-                    # crop center to width
-                    x_center = clip.w/2
-                    clip = clip.cropped(width=w, height=h, x_center=x_center, y_center=clip.h/2)
-                    logger.info("✅ Изображение успешно обработано")
+                    
+                    # Улучшенная обработка изображений
+                    from PIL import Image as PILImage, ImageEnhance, ImageFilter
+                    
+                    # Загружаем изображение через PIL для предобработки
+                    pil_img = PILImage.open(media_path)
+                    logger.info(f"📏 Оригинальный размер: {pil_img.size}")
+                    
+                    # Конвертируем в RGB если нужно
+                    if pil_img.mode != 'RGB':
+                        pil_img = pil_img.convert('RGB')
+                    
+                    # Увеличиваем четкость для мелких деталей
+                    enhancer = ImageEnhance.Sharpness(pil_img)
+                    pil_img = enhancer.enhance(1.4)  # Усиление резкости на 40%
+                    
+                    # Улучшаем контраст
+                    enhancer = ImageEnhance.Contrast(pil_img)
+                    pil_img = enhancer.enhance(1.2)  # Усиление контраста на 20%
+                    
+                    # Умное масштабирование - заполняем всю область с crop'ом
+                    scale_factor_w = w / pil_img.width
+                    scale_factor_h = h / pil_img.height
+                    scale_factor = max(scale_factor_w, scale_factor_h)  # заполняем всю область
+                    
+                    new_w = int(pil_img.width * scale_factor)
+                    new_h = int(pil_img.height * scale_factor)
+                    
+                    # Используем высококачественное масштабирование
+                    pil_img = pil_img.resize((new_w, new_h), PILImage.LANCZOS)
+                    logger.info(f"🔄 Масштабировали до: {new_w}x{new_h}")
+                    
+                    # Обрезаем по центру если нужно
+                    if new_w > w or new_h > h:
+                        left = max(0, (new_w - w) // 2)
+                        top = max(0, (new_h - h) // 2)
+                        right = left + w
+                        bottom = top + h
+                        pil_img = pil_img.crop((left, top, right, bottom))
+                        logger.info(f"✂️ Обрезали до: {w}x{h}")
+                    
+                    # Сохраняем улучшенное изображение
+                    temp_path = Path(self.config['PATHS']['tmp_dir']) / f"enhanced_{abs(hash(media_path))}.jpg"
+                    pil_img.save(temp_path, quality=95, optimize=True)
+                    
+                    # Создаем клип из улучшенного изображения
+                    clip = ImageClip(str(temp_path))
+                    logger.info("✅ Изображение улучшено и обработано")
                     return self._add_header_effects(clip.with_duration(self.duration))
                     
             except Exception as e:
