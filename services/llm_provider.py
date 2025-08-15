@@ -20,10 +20,12 @@ def create_llm_provider(config: dict) -> "GeminiProvider":
     primary_key = os.getenv('GEMINI_API_KEY', '')
     backup_key = os.getenv('GEMINI_API_KEY_BACKUP', '')
     third_key = os.getenv('GEMINI_API_KEY_OTHER_BACKUP', '')
+    fourth_key = os.getenv('GEMINI_API_KEY_BILLING', '')
     return GeminiProvider(
         api_key=primary_key,
         backup_api_key=backup_key,
         third_api_key=third_key,
+        fourth_api_key=fourth_key,
         model=config['LLM'].get('gemini_model', 'gemini-2.0-flash')
     )
 
@@ -33,6 +35,7 @@ class GeminiProvider:
     api_key: str
     backup_api_key: str = ''
     third_api_key: str = ''
+    fourth_api_key: str = ''
     model: str = 'gemini-2.0-flash'
     current_api_key: str = ''  # Текущий используемый ключ
     used_keys: list = None  # Список уже использованных ключей
@@ -75,7 +78,8 @@ class GeminiProvider:
         available_keys = [
             (self.api_key, "основной"),
             (self.backup_api_key, "резервный"), 
-            (self.third_api_key, "третий")
+            (self.third_api_key, "третий"),
+            (self.fourth_api_key, "четвертый (с биллингом)")
         ]
         
         # Диагностика
@@ -94,7 +98,10 @@ class GeminiProvider:
         # Находим следующий неиспользованный ключ
         for key, name in available_keys:
             if key and key not in self.used_keys:
-                logger.warning(f"🔄 Переключаемся на {name} Gemini API ключ")
+                if "биллингом" in name:
+                    logger.warning(f"💳 ВНИМАНИЕ: Переключаемся на {name} - ПЛАТНЫЙ API!")
+                else:
+                    logger.warning(f"🔄 Переключаемся на {name} Gemini API ключ")
                 self.current_api_key = key
                 return True
         
@@ -112,10 +119,10 @@ class GeminiProvider:
         logger.info("🤖 Начинаем генерацию с Gemini API...")
         logger.info(f"🔑 Используем ключ: {self.current_api_key[:10]}... (попытка с текущим ключом)")
         
-        for attempt in range(3):  # Максимум 3 попытки (для 3-х ключей)
+        for attempt in range(4):  # Максимум 4 попытки (для 4-х ключей)
             try:
                 client = self._get_client()
-                logger.info(f"📡 Отправляем запрос к Gemini (попытка {attempt + 1}/3)...")
+                logger.info(f"📡 Отправляем запрос к Gemini (попытка {attempt + 1}/4)...")
                 
                 # Добавляем timeout для каждого отдельного запроса
                 resp = await asyncio.wait_for(
@@ -133,7 +140,7 @@ class GeminiProvider:
                 
             except asyncio.TimeoutError:
                 logger.error(f"⏰ Timeout при запросе к Gemini API (попытка {attempt + 1})")
-                if attempt < 2 and self._switch_to_next_key():
+                if attempt < 3 and self._switch_to_next_key():
                     logger.info("💫 Повторяем запрос с другим API ключом...")
                     continue
                     
@@ -144,14 +151,14 @@ class GeminiProvider:
                 
                 logger.error(f"❌ Ошибка генерации (попытка {attempt + 1}): {e}")
                 
-                if is_quota_error and attempt < 2:
+                if is_quota_error and attempt < 3:
                     if self._switch_to_next_key():
                         logger.info("💫 Повторяем запрос с другим API ключом...")
                         continue
                     else:
                         logger.error("❌ Нет больше доступных API ключей для fallback")
                 
-                if attempt == 2:  # Последняя попытка
+                if attempt == 3:  # Последняя попытка
                     raise
             
         return ""
