@@ -96,5 +96,23 @@ def load_config(project_root: Path) -> dict:
                 "update [YOUTUBE].client_secret_file in config.ini."
             )
 
-    return config  # type: ignore[return-value]
+    # Конвертируем ConfigParser в обычный dict для удобства использования
+    result = {}
+    for section_name in config.sections():
+        section_dict = {}
+        for key in config[section_name]:
+            try:
+                # Пытаемся получить значение с интерполяцией
+                value = config[section_name][key]
+                section_dict[key] = value
+            except configparser.InterpolationMissingOptionError:
+                # Если переменная не найдена, используем raw значение
+                value = config[section_name].get(key, fallback='', raw=True)
+                section_dict[key] = value
+        result[section_name] = section_dict
+    
+    # Добавляем parsed данные
+    result['_parsed'] = config._parsed  # type: ignore[attr-defined]
+    
+    return result
 

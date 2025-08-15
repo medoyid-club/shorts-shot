@@ -175,7 +175,13 @@ async def main():
 
     composer = VideoComposer(config)
     uploader = YouTubeUploader(config)
-    twitter = TwitterUploader(config)
+    
+    # Инициализируем Twitter с обработкой ошибок
+    try:
+        twitter = TwitterUploader(config)
+    except Exception as e:
+        logger.warning(f"⚠️ Ошибка инициализации Twitter: {e}. Продолжаем без Twitter.")
+        twitter = None
 
     logger.info("🚀 Starting Telegram watcher...")
 

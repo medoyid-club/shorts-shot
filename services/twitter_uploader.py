@@ -35,7 +35,14 @@ class TwitterUploader:
     def __init__(self, config: dict):
         self.config = config
         self.twitter_config = config.get('TWITTER', {})
-        self.enabled = self.twitter_config.get('enabled', 'false').lower() == 'true'
+        
+        # Безопасная проверка enabled - если что-то пойдет не так, просто отключаем
+        try:
+            enabled_value = self.twitter_config.get('enabled', 'false')
+            self.enabled = str(enabled_value).lower() == 'true'
+        except Exception as e:
+            logger.warning(f"⚠️ Ошибка при чтении настройки enabled для Twitter: {e}")
+            self.enabled = False
         
         if not self.enabled:
             logger.info("📴 Twitter интеграция отключена")

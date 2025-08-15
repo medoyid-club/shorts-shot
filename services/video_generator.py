@@ -39,7 +39,12 @@ class VideoComposer:
         self.middle_red = config._parsed['VIDEO']['middle_red_rgb']  # type: ignore[attr-defined]
         self.header_zoom_start = float(v.get('header_zoom_start', 1.05))
         self.header_zoom_end = float(v.get('header_zoom_end', 1.00))
-        self.heartbeat_enabled = v.get('heartbeat_enabled', 'true').lower() == 'true'
+        # Безопасная проверка heartbeat_enabled
+        try:
+            heartbeat_value = v.get('heartbeat_enabled', 'true')
+            self.heartbeat_enabled = str(heartbeat_value).lower() == 'true'
+        except Exception:
+            self.heartbeat_enabled = True  # По умолчанию включено
         self.heartbeat_cycle_seconds = float(v.get('heartbeat_cycle_seconds', 1.6))
         self.heartbeat_height_ratio = float(v.get('heartbeat_height_ratio', 0.10))
         self.heartbeat_opacity_main = int(v.get('heartbeat_opacity_main', 180))
