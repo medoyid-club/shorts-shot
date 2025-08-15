@@ -5,7 +5,9 @@ import json
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict
 
 from google import genai
@@ -15,6 +17,22 @@ logger = logging.getLogger("llm")
 
 # Убираем настройки безопасности пока не разберемся с правильным синтаксисом
 # SAFETY_SETTINGS = None
+
+def _get_pacific_midnight_timestamp() -> float:
+    """Возвращает timestamp последней полуночи по Тихоокеанскому времени"""
+    # Тихоокеанское время: UTC-8 (PST) или UTC-7 (PDT)
+    # Для простоты используем PST круглый год (UTC-8)
+    pacific_tz = timezone(timedelta(hours=-8))
+    
+    # Получаем текущее время в тихоокеанском поясе
+    now_pacific = datetime.now(pacific_tz)
+    
+    # Находим полночь сегодняшнего дня
+    midnight_pacific = now_pacific.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Возвращаем timestamp полуночи (если сейчас уже после полуночи)
+    # Если сейчас до полуночи, то берем вчерашнюю полночь
+    return midnight_pacific.timestamp()
 
 def create_llm_provider(config: dict) -> "GeminiProvider":
     primary_key = os.getenv('GEMINI_API_KEY', '')
@@ -39,10 +57,14 @@ class GeminiProvider:
     model: str = 'gemini-2.0-flash'
     current_api_key: str = ''  # Текущий используемый ключ
     used_keys: list = None  # Список уже использованных ключей
+    exhausted_keys_timestamp: dict = None  # Время когда ключи были исчерпаны
+    last_quota_reset_check: float = None  # Последняя проверка сброса квоты
     
     def __post_init__(self):
         self.current_api_key = self.api_key
         self.used_keys = []  # Инициализируем список использованных ключей
+        self.exhausted_keys_timestamp = {}  # Инициализируем timestamps исчерпанных ключей
+        self.last_quota_reset_check = time.time()
         # Настройка retry для Gemini API
         self._setup_retry()
     
@@ -93,7 +115,9 @@ class GeminiProvider:
         # Помечаем текущий ключ как использованный ПЕРЕД поиском нового
         if self.current_api_key and self.current_api_key not in self.used_keys:
             self.used_keys.append(self.current_api_key)
-            logger.info(f"🚫 Помечаем текущий ключ как использованный")
+            # Записываем время исчерпания для квотных ограничений (1 час)
+            self.exhausted_keys_timestamp[self.current_api_key] = time.time()
+            logger.info(f"🚫 Помечаем текущий ключ как использованный (квота исчерпана)")
         
         # Находим следующий неиспользованный ключ
         for key, name in available_keys:
@@ -108,14 +132,82 @@ class GeminiProvider:
         logger.error("❌ Все API ключи исчерпаны!")
         return False
     
+    def _check_and_reset_quota(self):
+        """Проверяет и сбрасывает квоту, если прошла полночь по Тихоокеанскому времени"""
+        pacific_midnight = _get_pacific_midnight_timestamp()
+        
+        # Если последняя проверка была до полуночи, сбрасываем квоты
+        if self.last_quota_reset_check < pacific_midnight:
+            logger.info("🌅 Полночь по Тихоокеанскому времени прошла - сбрасываем квоты всех ключей!")
+            
+            # Очищаем все ограничения
+            restored_count = len(self.exhausted_keys_timestamp)
+            self.exhausted_keys_timestamp.clear()
+            self.used_keys.clear()
+            
+            # Возвращаемся к основному ключу
+            self.current_api_key = self.api_key
+            self.last_quota_reset_check = time.time()
+            
+            if restored_count > 0:
+                logger.info(f"✅ Восстановлено {restored_count} API ключей после сброса квоты")
+                logger.info("🔄 Возвращаемся к основному ключу")
+            
+            return True
+        return False
+    
     def reset_for_new_message(self):
-        """Сброс состояния для нового сообщения"""
+        """Сброс состояния для нового сообщения с учетом Тихоокеанского времени"""
         logger.info("🔄 Сбрасываем состояние API ключей для нового сообщения")
-        self.used_keys = []
-        self.current_api_key = self.api_key
+        
+        # Сначала проверяем, не прошла ли полночь по Тихоокеанскому времени
+        if self._check_and_reset_quota():
+            # Если прошла полночь, все ключи уже восстановлены
+            return
+        
+        # Если полночь не прошла, используем старую логику с часовыми интервалами
+        current_time = time.time()
+        quota_reset_hours = 1  # Дополнительная защита: час с момента исчерпания
+        
+        # Убираем ключи из черного списка, если прошел час с момента исчерпания
+        keys_to_restore = []
+        for key, timestamp in list(self.exhausted_keys_timestamp.items()):
+            if current_time - timestamp > quota_reset_hours * 3600:  # 1 час в секундах
+                keys_to_restore.append(key)
+                
+        for key in keys_to_restore:
+            del self.exhausted_keys_timestamp[key]
+            if key in self.used_keys:
+                self.used_keys.remove(key)
+            logger.info(f"✅ Восстанавливаем ключ {key[:10]}... (прошло >1 часа)")
+        
+        # Если основной ключ доступен, используем его
+        if self.api_key and self.api_key not in self.used_keys:
+            self.current_api_key = self.api_key
+            logger.info("🔄 Возвращаемся к основному ключу")
+        else:
+            # Ищем первый доступный ключ
+            available_keys = [
+                (self.api_key, "основной"),
+                (self.backup_api_key, "резервный"), 
+                (self.third_api_key, "третий"),
+                (self.fourth_api_key, "четвертый (с биллингом)")
+            ]
+            
+            for key, name in available_keys:
+                if key and key not in self.used_keys:
+                    self.current_api_key = key
+                    if "биллингом" in name:
+                        logger.warning(f"💳 Остаемся на {name} ключе")
+                    else:
+                        logger.info(f"🔄 Используем {name} ключ")
+                    break
     
     async def _generate_with_fallback(self, prompt: str) -> str:
         """Генерация с fallback на резервный API при ошибках квоты"""
+        # Проверяем квоту перед началом генерации
+        self._check_and_reset_quota()
+        
         logger.info("🤖 Начинаем генерацию с Gemini API...")
         logger.info(f"🔑 Используем ключ: {self.current_api_key[:10]}... (попытка с текущим ключом)")
         
