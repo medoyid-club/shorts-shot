@@ -24,6 +24,13 @@ def _clean_external_env() -> None:
             os.environ.pop(var, None)
 
 
+class ConfigDict(dict):
+    """Словарь с поддержкой атрибутов для совместимости с ConfigParser"""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._parsed = None
+
+
 def _find_client_secret_file(project_root: Path) -> str | None:
     # Prefer exact value from env; otherwise, try to auto-detect a client_secret_*.json in root
     for pattern in (
@@ -96,8 +103,8 @@ def load_config(project_root: Path) -> dict:
                 "update [YOUTUBE].client_secret_file in config.ini."
             )
 
-    # Конвертируем ConfigParser в обычный dict для удобства использования
-    result = {}
+    # Конвертируем ConfigParser в ConfigDict для удобства использования
+    result = ConfigDict()
     for section_name in config.sections():
         section_dict = {}
         for key in config[section_name]:
@@ -111,8 +118,9 @@ def load_config(project_root: Path) -> dict:
                 section_dict[key] = value
         result[section_name] = section_dict
     
-    # Добавляем parsed данные
-    result['_parsed'] = config._parsed  # type: ignore[attr-defined]
+    # Добавляем parsed данные как атрибут
+    if hasattr(config, '_parsed'):
+        result._parsed = config._parsed  # type: ignore[attr-defined]
     
     return result
 
