@@ -137,6 +137,7 @@ def log_config_info(config: dict):
 
 def create_log_viewer_script():
     """Создает скрипт для удобного просмотра логов"""
+    logger = logging.getLogger("logger_config")
     script_content = '''#!/bin/bash
 # Скрипт для просмотра логов бота
 
@@ -184,11 +185,25 @@ case "$1" in
 esac
 '''
     
-    with open('view_logs.sh', 'w', encoding='utf-8') as f:
-        f.write(script_content)
+    # Пытаемся создать скрипт в корне проекта; при ошибке — в папке logs
+    primary_path = Path('view_logs.sh')
+    try:
+        with open(primary_path, 'w', encoding='utf-8') as f:
+            f.write(script_content)
+        os.chmod(primary_path, 0o755)
+        logger.info("📜 Создан скрипт просмотра логов: ./view_logs.sh")
+        return
+    except Exception as e:
+        logger.warning(f"⚠️ Не удалось создать ./view_logs.sh ({e}), пробуем logs/view_logs.sh")
     
-    # Делаем скрипт исполняемым
-    os.chmod('view_logs.sh', 0o755)
-    
-    logger = logging.getLogger("logger_config")
-    logger.info("📜 Создан скрипт просмотра логов: ./view_logs.sh")
+    try:
+        logs_dir = Path('logs')
+        logs_dir.mkdir(exist_ok=True)
+        fallback_path = logs_dir / 'view_logs.sh'
+        with open(fallback_path, 'w', encoding='utf-8') as f:
+            f.write(script_content)
+        os.chmod(fallback_path, 0o755)
+        logger.info("📜 Создан скрипт просмотра логов: logs/view_logs.sh")
+    except Exception as e:
+        # Не блокируем запуск сервиса из-за утилитарного файла
+        logger.warning(f"⚠️ Не удалось создать скрипт просмотра логов: {e}")
