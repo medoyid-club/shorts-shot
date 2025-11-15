@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>News Short</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Arsenal:wght@700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 1080px;
+            height: 1920px;
+            overflow: hidden;
+            font-family: 'Arsenal', sans-serif;
+            background: #e0e0e0; /* Серый фон как в макете */
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Имя ресурса (t.me/...) теперь будет накладываться на видео */
+        .source-watermark {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 10px 20px;
+            font-size: 36px;
+            font-weight: 700;
+            border-radius: 10px;
+            z-index: 10;
+            animation: fadeIn 1s ease-out;
+        }
+
+        /* Мультимедийная зона */
+        .media-zone {
+            flex-basis: 45%; /* ~45% высоты */
+            background: #222;
+            position: relative;
+            overflow: hidden;
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        .media-zone video,
+        .media-zone img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Заголовок (желтый блок) */
+        .title-block {
+            flex-shrink: 0;
+            background: #FFD700; /* Желтый */
+            color: #1a1a1a;
+            padding: 30px 40px;
+            font-size: 64px;
+            font-weight: 700;
+            line-height: 1.25;
+            text-align: center;
+            animation: slideInUp 0.6s ease-out 0.2s backwards;
+            border-bottom: 5px solid #1a1a1a;
+        }
+
+        /* Декоративный разделитель */
+        .separator {
+            flex-shrink: 0;
+            height: 80px;
+            background: #FFD700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.5s ease-out 0.5s backwards;
+        }
+
+        .separator-ornament {
+            width: 120px;
+            height: auto;
+        }
+
+        /* Содержание шортса (серая зона с красными блоками) */
+        .content-area {
+            flex-grow: 1;
+            background: #e0e0e0;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            overflow-y: auto;
+        }
+        
+        .content-line {
+            background: #d90429; /* Ярко-красный */
+            color: white;
+            padding: 20px 35px;
+            border-radius: 12px;
+            font-size: 48px;
+            font-weight: 700;
+            line-height: 1.3;
+            text-align: center;
+            width: 95%;
+            animation: popIn 0.5s ease-out backwards;
+        }
+
+
+        /* Анимации */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(40px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes popIn {
+            from {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+    </style>
+</head>
+<body>
+    <!-- Мультимедийная зона (видео или картинка) -->
+    <div class="media-zone" id="mediaZone">
+        <div class="source-watermark">{{SOURCE_NAME}}</div>
+        <!-- Видео -->
+        <video id="mediaVideo" autoplay loop muted playsinline style="display: none;">
+            <source src="{{NEWS_VIDEO}}" type="video/mp4">
+        </video>
+        <!-- Изображение -->
+        <img id="mediaImage" src="{{NEWS_IMAGE}}" alt="News media" style="display: none;">
+    </div>
+
+    <!-- Заголовок (желтый блок) -->
+    <div class="title-block" id="titleBlock">
+        {{NEWS_TITLE}}
+    </div>
+
+    <!-- Декоративный разделитель -->
+    <div class="separator">
+        <svg class="separator-ornament" viewBox="0 0 100 20">
+            <path d="M0 10 C 20 20, 30 0, 50 10 S 70 20, 80 10 C 90 0, 100 10, 100 10" fill="none" stroke="#1a1a1a" stroke-width="3"/>
+            <circle cx="50" cy="10" r="4" fill="#1a1a1a"/>
+        </svg>
+    </div>
+
+    <!-- Содержание (серая зона с красными блоками) -->
+    <div class="content-area" id="contentArea">
+        <!-- Сюда будут вставляться строки JS-скриптом -->
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 1. Обработка медиа: делаем видимым нужный элемент
+            const mediaVideo = document.getElementById('mediaVideo');
+            const mediaImage = document.getElementById('mediaImage');
+            
+            const videoSource = mediaVideo.getElementsByTagName('source')[0];
+            const videoSrc = videoSource ? videoSource.getAttribute('src') : '';
+            const imageSrc = mediaImage.getAttribute('src');
+
+            if (videoSrc) {
+                mediaVideo.style.display = 'block';
+                console.log('Displaying video:', videoSrc);
+            } else if (imageSrc) {
+                mediaImage.style.display = 'block';
+                console.log('Displaying image:', imageSrc);
+            }
+
+            // 2. Генерация блоков с текстом
+            const contentArea = document.getElementById('contentArea');
+            const briefText = `{{NEWS_BRIEF}}`;
+
+            // Заменяем \n на реальные переносы строк и разбиваем
+            const lines = briefText.replace(/\\n/g, '\n').split('\n');
+            
+            lines.forEach((line, index) => {
+                const trimmedLine = line.trim();
+                if (trimmedLine) { // Добавляем только непустые строки
+                    const lineDiv = document.createElement('div');
+                    lineDiv.className = 'content-line';
+                    lineDiv.textContent = trimmedLine;
+                    lineDiv.style.animationDelay = `${index * 0.15}s`;
+                    contentArea.appendChild(lineDiv);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

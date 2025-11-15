@@ -4,73 +4,48 @@ import os
 from pathlib import Path
 
 from services.config_loader import load_config
-from services.llm_provider import create_llm_provider
+from services.video_factory import create_video_generator, create_llm_provider
 from services.telegram_monitor import start_telegram_watcher
-from services.video_generator import VideoComposer
 from services.youtube_uploader import YouTubeUploader
 from services.twitter_uploader import TwitterUploader
+from services.telegram_publisher import TelegramPublisher
 from services.storage import ensure_directories
 from services.logger_config import setup_logging, log_system_info, log_config_info, create_log_viewer_script
 logger = logging.getLogger("main")
 
 
-async def process_message(text: str | None, media_path: str | None, config: dict, uploader: YouTubeUploader, composer: VideoComposer, twitter: TwitterUploader = None):
+async def process_message(text: str | None, media_path: str | None, config: dict, uploader: YouTubeUploader, composer, twitter: TwitterUploader = None, telegram_publisher: TelegramPublisher = None):
     if not text:
         logger.info("Message has no text. Using default text for video.")
         text = "Новини"  # Fallback текст
 
     llm = create_llm_provider(config)
-    # Сбрасываем состояние API ключей для нового сообщения
-    llm.reset_for_new_message()
+    
+    # Проверяем версию генератора для выбора формата LLM
+    generator_version = config['VIDEO'].get('generator_version', 'v1').lower()
+    
+    # Сбрасываем состояние API ключей для нового сообщения (только для V1)
+    if hasattr(llm, 'reset_for_new_message'):
+        llm.reset_for_new_message()
 
-    # Task 2.1: Summarize for middle text
+    # Task 2: ЕДИНЫЙ запрос к LLM — получаем весь пакет (контент + SEO)
     try:
-        short_text = await llm.summarize_for_video(text)
-        logger.info("Short text generated")
-    except Exception as e:
-        logger.error("LLM summarization failed: %s. Using original text.", e)
-        # Обрезаем оригинальный текст до разумной длины
-        short_text = text[:200] + "..." if len(text) > 200 else text
+        source_url = config['VIDEO'].get('source_text', '')
+        source_name = config['TELEGRAM'].get('channel', '')
+        pkg = await llm.generate_video_package(text, source_name=source_name, source_url=source_url)
+        video_content = pkg.get('video_content', {}) if isinstance(pkg, dict) else {}
+        seo_pkg = pkg.get('seo_package', {}) if isinstance(pkg, dict) else {}
 
-    # Task 2.2: SEO JSON package
-    try:
-        seo = await llm.generate_seo_package(text)
-        # Пост-валидация
-        title = (seo.get('title') or '').strip()
-        if not title:
-            title = (text[:70] + '...') if len(text) > 70 else text
-        
-        # Добавляем 3 хештега в конец заголовка
-        tags_temp = seo.get('tags', [])
-        if isinstance(tags_temp, str):
-            tags_temp = [t.strip() for t in tags_temp.split(',') if t.strip()]
-        
-        if tags_temp:
-            # Берем первые 3 тега для заголовка
-            title_hashtags = [f"#{tag.replace(' ', '')}" for tag in tags_temp[:3]]
-            title_with_hashtags = f"{title} {' '.join(title_hashtags)}"
-            
-            # Если превышает лимит, сокращаем основной заголовок
-            if len(title_with_hashtags) > 90:
-                max_title_len = 90 - len(' '.join(title_hashtags)) - 1
-                title = title[:max_title_len].rstrip() + "..."
-                title = f"{title} {' '.join(title_hashtags)}"
-            else:
-                title = title_with_hashtags
-        elif len(title) > 70:
-            title = title[:69].rstrip() + '…'
+        # short_text для компоновки V2
+        short_text = {
+            'title': video_content.get('title', text[:120] if text else 'Новини'),
+            'brief': video_content.get('summary', '')
+        }
 
-        # Описание — максимум 2 коротких речення або пусто
-        description = (seo.get('description') or '').strip()
-        # Если пусто — сформируем из тегов видимые хештеги как описание
-        if not description:
-            pass
-        else:
-            description = description.replace('\n\n', '\n').strip()
-            if len(description) > 280:
-                description = description[:279].rstrip() + '…'
-
-        tags = seo.get('tags') or []
+        # SEO для YouTube
+        title = (seo_pkg.get('youtube_title') or video_content.get('title') or '').strip() or (text[:70] + '...' if len(text) > 70 else text)
+        description = (seo_pkg.get('youtube_description') or '').strip()
+        tags = seo_pkg.get('tags') or []
         if isinstance(tags, str):
             tags = [t.strip() for t in tags.split(',') if t.strip()]
         # Минимум 5, максимум 15
@@ -79,17 +54,13 @@ async def process_message(text: str | None, media_path: str | None, config: dict
         if len(tags) < 5:
             tags += ['updates', 'video', 'world']
             tags = tags[:15]
-
-        # Если описания нет — добавим хештеги в description (5 штук)
-        if not description:
-            hash_tags = [f"#{t.replace(' ', '')}" for t in tags[:5]]
-            description = " ".join(hash_tags)
-
         seo = {'title': title, 'description': description, 'tags': tags}
-        logger.info("SEO package normalized: title='%s'", seo['title'][:60])
+        logger.info("SEO package (1-call) ready: title='%s'", seo['title'][:60])
     except Exception as e:
-        logger.error("LLM SEO generation failed: %s. Using fallback SEO data.", e)
-        # Создаем более качественный fallback заголовок
+        logger.error("LLM package generation failed: %s. Falling back.", e)
+        # Fallback short_text
+        short_text = text[:200] + "..." if len(text) > 200 else text
+        # Fallback SEO
         text_lower = (text or "").lower()
         if "путін" in text_lower or "putin" in text_lower:
             title_base = "Путін та геополітика"
@@ -103,7 +74,6 @@ async def process_message(text: str | None, media_path: str | None, config: dict
             title_base = "Готельний бізнес та ціни"
         else:
             title_base = "Новини: " + (text[:40] if text else "Останні події")
-        
         seo = {
             'title': title_base[:65],
             'description': '',
@@ -123,16 +93,34 @@ async def process_message(text: str | None, media_path: str | None, config: dict
     )
     logger.info("Video composed: %s", video_path)
 
-    # Step 4: Upload to YouTube
-    uploader.upload_video(
-        video_file=str(video_path),
-        title=seo.get('title', 'News Update'),
-        description=seo.get('description', ''),
-        tags=seo.get('tags', []),
-        category_id=config['YOUTUBE'].get('category_id', '25'),
-        privacy_status=config['YOUTUBE'].get('privacy_status', 'public')
-    )
-    logger.info("YouTube upload complete")
+    # Step 4: Upload to YouTube or Telegram
+    upload_to_telegram = config.get('GENERAL', {}).get('upload_to_telegram', False)
+
+    if upload_to_telegram and telegram_publisher and telegram_publisher.is_available():
+        # Публикация в Telegram
+        logger.info("📢 Публикуем в Telegram канал...")
+        telegram_success = await telegram_publisher.upload_video(
+            video_path=str(video_path),
+            title=seo.get('title', 'News Update'),
+            description=seo.get('description', ''),
+            tags=seo.get('tags', [])
+        )
+        if telegram_success:
+            logger.info("✅ Telegram публикация завершена")
+        else:
+            logger.error("❌ Ошибка публикации в Telegram")
+    else:
+        # Публикация на YouTube
+        logger.info("📺 Публикуем на YouTube...")
+        uploader.upload_video(
+            video_file=str(video_path),
+            title=seo.get('title', 'News Update'),
+            description=seo.get('description', ''),
+            tags=seo.get('tags', []),
+            category_id=config['YOUTUBE'].get('category_id', '25'),
+            privacy_status=config['YOUTUBE'].get('privacy_status', 'public')
+        )
+        logger.info("✅ YouTube загрузка завершена")
     
     # Step 5: Upload to Twitter (если включено)
     if twitter and twitter.enabled:
@@ -173,9 +161,22 @@ async def main():
     
     ensure_directories(config)
 
-    composer = VideoComposer(config)
+    # Создаем генератор видео через фабрику (автоматически выбирает V1 или V2)
+    composer = create_video_generator(config)
     uploader = YouTubeUploader(config)
-    
+
+    # Инициализируем Telegram Publisher
+    try:
+        telegram_publisher = TelegramPublisher(config)
+        if telegram_publisher.is_available():
+            logger.info("✅ Telegram Publisher инициализирован")
+        else:
+            logger.warning("⚠️ Telegram Publisher недоступен")
+            telegram_publisher = None
+    except Exception as e:
+        logger.warning(f"⚠️ Ошибка инициализации Telegram Publisher: {e}. Продолжаем без Telegram.")
+        telegram_publisher = None
+
     # Инициализируем Twitter с обработкой ошибок
     try:
         twitter = TwitterUploader(config)
@@ -187,7 +188,7 @@ async def main():
 
     async def handler(text: str | None, media_path: str | None):
         try:
-            await process_message(text, media_path, config, uploader, composer, twitter)
+            await process_message(text, media_path, config, uploader, composer, twitter, telegram_publisher)
         except Exception as e:
             logger.exception("❌ Failed to process message: %s", e)
 

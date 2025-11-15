@@ -1,3 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Secrets and credentials
+.env
+.env.*
+!example.env
+token.json
+client_secret_*.json
+state/*.session
+state/*.session-journal
+
+# Build/artifacts/logs
+logs/
+outputs/
+resources/tmp/
+
+# Tests and sandbox utilities
+test_*.py
+run_sandbox_test.py
+dev_sandbox.py
+test_bot_simple.py
+test_bot_simple_win.py
+test_design_only.py
+test_full_pipeline.py
+test_gemini.py
+test_ollama.py
+test_video_versions.py
+DEV_SANDBOX*.md
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
 # Sensitive files
 .env
 token.json

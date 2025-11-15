@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>News Short V3 - Premium Design</title>
+    
+    <!-- GSAP Animation Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Arsenal:wght@700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 1080px;
+            height: 1920px;
+            overflow: hidden;
+            font-family: 'Arsenal', sans-serif;
+            /* Современный градиентный фон вместо плоского серого */
+            background: radial-gradient(circle at center, #2a2a2a 0%, #1a1a1a 50%, #0a0a0a 100%);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* Водяной знак источника с прозрачностью 60% */
+        .source-watermark {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.85), rgba(30, 30, 30, 0.85));
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+            color: white;
+            padding: 12px 24px;
+            font-size: 36px;
+            font-weight: 700;
+            border-radius: 12px;
+            z-index: 10;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            opacity: 0.6; /* Прозрачность 60% */
+        }
+
+        /* QR код под надписью - статичный, без анимации */
+        .qr-code {
+            position: absolute;
+            top: 100px; /* Опущен ниже, чтобы не накладывался на надпись */
+            left: 20px; /* Выровнен по левому краю */
+            width: 120px; /* Небольшой размер */
+            height: 120px;
+            z-index: 10;
+            filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.4)) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+            /* Эффект зависания в пространстве */
+            opacity: 0.9;
+            /* Явно отключаем любые анимации */
+            animation: none !important;
+            transform: none !important;
+        }
+
+        .qr-code img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            border-radius: 8px;
+            /* Явно отключаем любые анимации для изображения */
+            animation: none !important;
+            transform: none !important;
+        }
+
+        /* Мультимедийная зона с киношным движением камеры */
+        .media-zone {
+            flex-basis: 45%; /* Возвращаем исходный размер */
+            background: #222;
+            position: relative;
+            overflow: hidden;
+            opacity: 1; /* Видима по умолчанию */
+        }
+
+        .media-zone::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(
+                180deg,
+                rgba(0, 0, 0, 0.3) 0%,
+                transparent 50%,
+                rgba(0, 0, 0, 0.3) 100%
+            );
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .media-zone video,
+        .media-zone img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform-origin: center center;
+            transform: translate(0, 0) scale(1);
+        }
+
+        .fallback-motion {
+            animation: cinematicFallback 6s ease-in-out infinite;
+        }
+
+        @keyframes cinematicFallback {
+            0% {
+                transform: scale(1) translate(0, 0);
+            }
+            50% {
+                transform: scale(1.04) translate(-12px, -10px);
+            }
+            100% {
+                transform: scale(1) translate(0, 0);
+            }
+        }
+
+        /* Титульная надпись - плавающий блок внизу медиа-зоны */
+        .title-watermark {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.6), rgba(255, 238, 136, 0.6)); /* Прозрачность 60% */
+            color: #ffffff; /* Белый текст */
+            padding: 20px 30px;
+            font-size: 56px;
+            font-weight: 700;
+            line-height: 1.3;
+            text-align: center;
+            border-radius: 12px;
+            z-index: 10;
+            border: 2px solid rgba(0, 0, 0, 0.1);
+            /* Небольшой Halo эффект - свечение вокруг */
+            box-shadow: 
+                0 4px 20px rgba(0, 0, 0, 0.5),
+                0 0 30px rgba(255, 215, 0, 0.4),
+                0 0 50px rgba(255, 215, 0, 0.2);
+            -webkit-backdrop-filter: blur(5px);
+            backdrop-filter: blur(5px);
+            /* Эффект "висения в воздухе" */
+            transform: translateY(0);
+            /* Текст с тенями/свечением для белого текста */
+            text-shadow: 
+                0 0 10px rgba(0, 0, 0, 0.9),
+                0 0 20px rgba(0, 0, 0, 0.7),
+                0 2px 4px rgba(0, 0, 0, 0.8),
+                0 4px 8px rgba(0, 0, 0, 0.6),
+                2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Содержание с улучшенным дизайном - возвращаем в отдельную зону */
+        .content-area {
+            flex-grow: 1;
+            background: linear-gradient(180deg, #e0e0e0 0%, #d0d0d0 100%);
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            overflow-y: auto;
+            position: relative;
+        }
+        
+        .content-line {
+            background: linear-gradient(135deg, #d90429 0%, #b0031f 100%);
+            color: white;
+            padding: 20px 35px;
+            border-radius: 16px;
+            font-size: 48px;
+            font-weight: 700;
+            line-height: 1.3;
+            text-align: center;
+            width: 95%;
+            /* Улучшенная тень для глубины */
+            box-shadow: 
+                0 4px 15px rgba(217, 4, 41, 0.4),
+                0 2px 5px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            /* Градиентная граница */
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+            opacity: 1; /* Видимы по умолчанию */
+            transform: translateY(0); /* На месте по умолчанию */
+        }
+
+        /* Микро-анимация при наведении (для визуального интереса) */
+        .content-line::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(255, 255, 255, 0.1),
+                transparent
+            );
+            transition: left 0.5s;
+        }
+
+
+        /* Дополнительные эффекты для контента */
+        .content-line:nth-child(odd) {
+            transform: translateX(-20px);
+        }
+
+        .content-line:nth-child(even) {
+            transform: translateX(20px);
+        }
+
+        /* Улучшенные анимации появления (резервные, если GSAP не загрузится) */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(40px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes slideInLeft {
+            from {
+                opacity: 0;
+                transform: translateX(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes bounceIn {
+            0% {
+                opacity: 0;
+                transform: scale(0.3) translateY(50px);
+            }
+            50% {
+                opacity: 1;
+                transform: scale(1.05);
+            }
+            70% {
+                transform: scale(0.9);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        /* Fallback анимации для элементов без GSAP */
+        .media-zone.fallback {
+            animation: fadeInUp 0.8s ease-out forwards;
+        }
+
+        .content-line.fallback {
+            animation: bounceIn 0.6s ease-out forwards;
+        }
+    </style>
+</head>
+<body>
+    <!-- Мультимедийная зона (видео или картинка) -->
+    <div class="media-zone" id="mediaZone">
+        <div class="source-watermark" id="sourceWatermark">{{SOURCE_NAME}}</div>
+        <div class="qr-code" id="qrCode" style="display: none;">
+            <img src="{{QR_CODE_PATH}}" alt="QR Code" id="qrImage">
+        </div>
+        <!-- Титульная надпись - плавающий блок внизу -->
+        <div class="title-watermark" id="titleWatermark">{{NEWS_TITLE}}</div>
+        <!-- Видео - с loop для плавного перехода при повторном просмотре -->
+        <video id="mediaVideo" autoplay loop muted playsinline style="display: none;">
+            <source src="{{NEWS_VIDEO}}" type="video/mp4">
+        </video>
+        <!-- Изображение -->
+        <img id="mediaImage" src="{{NEWS_IMAGE}}" alt="News media" style="display: none;">
+    </div>
+
+    <!-- Содержание (серая зона с красными блоками) -->
+    <div class="content-area" id="contentArea">
+        <!-- Сюда будут вставляться строки JS-скриптом -->
+    </div>
+
+    <script>
+        // Проверка загрузки GSAP
+        const GSAP_LOADED = typeof gsap !== 'undefined';
+
+        function setupCinematicMotion(target) {
+            if (!target) {
+                return;
+            }
+
+            // Удаляем предыдущие настройки
+            target.classList.remove('fallback-motion');
+            target.style.transformOrigin = 'center center';
+            target.style.transform = 'translate(0px, 0px) scale(1)';
+            target.style.transition = 'none';
+
+            if (window.__cinematicTimeline) {
+                try {
+                    window.__cinematicTimeline.kill();
+                } catch (err) {
+                    console.warn('Failed to kill previous cinematic timeline', err);
+                }
+                window.__cinematicTimeline = null;
+            }
+
+            if (GSAP_LOADED) {
+                gsap.set(target, { x: 0, y: 0, scale: 1 });
+                const tl = gsap.timeline({
+                    repeat: -1,
+                    defaults: {
+                        ease: 'sine.inOut'
+                    }
+                });
+
+                tl.to(target, {
+                    duration: 3,
+                    scale: 1.035,
+                    x: -18,
+                    y: -12,
+                    rotation: 0.1
+                }).to(target, {
+                    duration: 3,
+                    scale: 1,
+                    x: 0,
+                    y: 0,
+                    rotation: 0
+                });
+
+                window.__cinematicTimeline = tl;
+                window.__cinematicDuration = 6;
+                window.__cinematicTarget = target;
+                tl.play(0);
+            } else {
+                target.classList.add('fallback-motion');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // 1. Обработка медиа: делаем видимым нужный элемент
+            const mediaVideo = document.getElementById('mediaVideo');
+            const mediaImage = document.getElementById('mediaImage');
+            const mediaZone = document.getElementById('mediaZone');
+            
+            const videoSource = mediaVideo.getElementsByTagName('source')[0];
+            const videoSrc = videoSource ? videoSource.getAttribute('src') : '';
+            const imageSrc = mediaImage.getAttribute('src');
+
+            if (videoSrc) {
+                mediaVideo.style.display = 'block';
+                mediaVideo.style.visibility = 'visible';
+                mediaVideo.style.opacity = '1';
+                console.log('Displaying video:', videoSrc);
+                
+                // Убеждаемся что видео загрузится и проиграется с нормальной скоростью
+                mediaVideo.addEventListener('loadeddata', function() {
+                    console.log('Video loaded successfully');
+                    mediaVideo.style.opacity = '1';
+                    // Устанавливаем скорость воспроизведения на нормальную (1x)
+                    mediaVideo.playbackRate = 1.0;
+                    // Включаем loop для плавного перехода
+                    mediaVideo.loop = true;
+                    console.log('Video duration:', mediaVideo.duration, 'seconds');
+                    setupCinematicMotion(mediaVideo);
+                });
+                
+                mediaVideo.addEventListener('error', function(e) {
+                    console.error('Video load error:', e);
+                });
+
+                if (mediaVideo.readyState >= 2) {
+                    setupCinematicMotion(mediaVideo);
+                }
+            } else if (imageSrc) {
+                mediaImage.style.display = 'block';
+                mediaImage.style.visibility = 'visible';
+                mediaImage.style.opacity = '1';
+                console.log('Displaying image:', imageSrc);
+                // Убеждаемся что изображение загрузится
+                mediaImage.addEventListener('load', function() {
+                    console.log('Image loaded successfully');
+                    mediaImage.style.opacity = '1';
+                    setupCinematicMotion(mediaImage);
+                });
+                mediaImage.addEventListener('error', function(e) {
+                    console.error('Image load error:', e);
+                });
+
+                if (mediaImage.complete) {
+                    setupCinematicMotion(mediaImage);
+                }
+            } else {
+                console.warn('No media source found');
+            }
+
+            // 1.5. Обработка QR кода
+            const qrCode = document.getElementById('qrCode');
+            const qrImage = document.getElementById('qrImage');
+            const qrSrc = qrImage ? qrImage.getAttribute('src') : '';
+            
+            if (qrSrc && qrSrc.trim() !== '') {
+                qrCode.style.display = 'block';
+                qrImage.addEventListener('load', function() {
+                    console.log('QR code loaded successfully');
+                });
+                qrImage.addEventListener('error', function(e) {
+                    console.error('QR code load error:', e);
+                    qrCode.style.display = 'none';
+                });
+            } else {
+                console.warn('No QR code source found');
+                qrCode.style.display = 'none';
+            }
+
+            // 2. Генерация блоков с текстом
+            const contentArea = document.getElementById('contentArea');
+            const briefText = `{{NEWS_BRIEF}}`;
+
+            // Заменяем \n на реальные переносы строк и разбиваем
+            const lines = briefText.replace(/\\n/g, '\n').split('\n');
+            
+            lines.forEach((line, index) => {
+                const trimmedLine = line.trim();
+                if (trimmedLine) {
+                    const lineDiv = document.createElement('div');
+                    lineDiv.className = 'content-line';
+                    lineDiv.textContent = trimmedLine;
+                    lineDiv.setAttribute('data-index', index);
+                    contentArea.appendChild(lineDiv);
+                }
+            });
+
+            // 3. GSAP анимации (если библиотека загружена) - добавляют плавные эффекты движения
+            // Элементы уже видимы по умолчанию (opacity: 1), GSAP только добавляет движение и масштабирование
+            if (GSAP_LOADED) {
+                console.log('✅ GSAP loaded, using premium animations');
+                
+                // Анимация водяного знака - плавное движение сверху (без изменения opacity)
+                gsap.from('#sourceWatermark', {
+                    y: -30,
+                    duration: 0.8,
+                    ease: 'power3.out',
+                    immediateRender: false // Не скрывать элемент сразу
+                });
+
+                // Анимация QR кода - убрана, QR статичный
+
+                // Анимация медиа зоны - легкий zoom эффект (без изменения opacity)
+                gsap.from('#mediaZone', {
+                    scale: 1.05,
+                    duration: 1,
+                    ease: 'power2.out',
+                    delay: 0.1,
+                    immediateRender: false
+                });
+
+                // Анимация желтого заголовка - убрана, заголовок статичный
+
+                // Анимация красных блоков с stagger эффектом (без изменения opacity)
+                const contentLines = document.querySelectorAll('.content-line');
+                gsap.from(contentLines, {
+                    y: 30,
+                    scale: 0.95,
+                    duration: 0.7,
+                    stagger: {
+                        amount: 0.8,
+                        from: 'start',
+                        ease: 'back.out(1.4)'
+                    },
+                    ease: 'back.out(1.4)',
+                    delay: 1.0,
+                    immediateRender: false
+                });
+
+            } else {
+                // Fallback: элементы уже видимы по умолчанию, просто логируем
+                console.log('⚠️ GSAP not loaded, elements visible by default');
+            }
+
+            // 4. Дополнительные эффекты после загрузки медиа
+            const mediaElement = mediaVideo.style.display !== 'none' ? mediaVideo : mediaImage;
+            
+            if (mediaElement) {
+                if (GSAP_LOADED) {
+                    gsap.to(mediaElement, {
+                        opacity: 1,
+                        duration: 0.5,
+                        ease: 'power2.out',
+                        delay: 0.2
+                    });
+                }
+            }
+        });
+
+        // Обработка ошибок загрузки GSAP
+        window.addEventListener('error', function(e) {
+            if (e.message && e.message.includes('gsap')) {
+                console.warn('GSAP failed to load, using CSS animations');
+            }
+        });
+    </script>
+</body>
+</html>
+

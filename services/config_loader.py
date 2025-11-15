@@ -45,7 +45,32 @@ def _find_client_secret_file(project_root: Path) -> str | None:
 
 
 def load_config(project_root: Path) -> dict:
-    env_path = project_root / '.env'
+    # Select which .env to load:
+    # Priority:
+    # 1) ENV_FILE (can be absolute or relative to project root)
+    # 2) APP_ENV in {sandbox,test,dev,development,production,prod}
+    # 3) default ".env"
+    env_file_env = os.environ.get('ENV_FILE', '').strip()
+    if env_file_env:
+        # Support absolute or project-relative paths
+        env_candidate = Path(env_file_env)
+        if not env_candidate.is_absolute():
+            env_candidate = project_root / env_candidate
+        env_path = env_candidate
+    else:
+        app_env = os.environ.get('APP_ENV', '').strip().lower()
+        if app_env in ('sandbox', 'test', 'dev', 'development'):
+            env_path = project_root / '.env.sandbox'
+        elif app_env in ('production', 'prod'):
+            env_path = project_root / '.env'
+        else:
+            env_path = project_root / '.env'
+
+    # If selected env file does not exist, silently fall back to default .env
+    if not env_path.exists():
+        fallback = project_root / '.env'
+        env_path = fallback if fallback.exists() else env_path
+
     _clean_external_env()
     if env_path.exists():
         # Force .env to override any pre-existing values

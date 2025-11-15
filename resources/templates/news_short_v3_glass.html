@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>News Short V3 – Glass Neon Edition</title>
+
+    <!-- GSAP Animation Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Arsenal:wght@700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 1080px;
+            height: 1920px;
+            overflow: hidden;
+            font-family: 'Arsenal', sans-serif;
+            color: #f4f7ff;
+            background: linear-gradient(-45deg, #020024, #090979, #015d8a, #ff0099);
+            background-size: 400% 400%;
+            display: grid; /* CSS Grid для стабильных зон */
+            grid-template-rows: 45% 1fr; /* media / content */
+            grid-template-columns: 1fr;
+            position: relative;
+        }
+
+        body::before, 
+        body::after {
+            content: '';
+            position: absolute;
+            width: 720px;
+            height: 720px;
+            border-radius: 50%;
+            filter: blur(180px);
+            opacity: 0.55;
+            z-index: 0;
+        }
+
+        body::before {
+            top: -220px;
+            left: -220px;
+            background: rgba(255, 0, 153, 0.65);
+        }
+
+        body::after {
+            bottom: -240px;
+            right: -200px;
+            background: rgba(0, 180, 255, 0.6);
+        }
+
+        .background-glass {
+            position: absolute;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.06);
+            -webkit-backdrop-filter: blur(60px);
+            backdrop-filter: blur(60px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow:
+                inset 0 0 120px rgba(255, 255, 255, 0.12),
+                inset 0 0 40px rgba(0, 0, 0, 0.25);
+            z-index: 1;
+        }
+
+        .background-grid {
+            position: absolute;
+            inset: -20px;
+            background-image:
+                linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+            background-size: 60px 60px;
+            opacity: 0.4;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        body > *:not(.background-glass):not(.background-grid) {
+            position: relative;
+            z-index: 3;
+        }
+
+        .header-controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            padding-left: 64px;  /* больше отступ слева: SOURCE_NAME правее */
+            padding-right: 64px; /* больше отступ справа: кнопки левее */
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 11;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        /* Водяной знак источника */
+        .source-watermark {
+            /* position, top, left, z-index are now handled by .header-controls */
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.82), rgba(32, 32, 32, 0.72));
+            -webkit-backdrop-filter: blur(12px);
+            backdrop-filter: blur(12px);
+            color: rgba(255, 255, 255, 0.85);
+            padding: 12px 24px;
+            font-size: 36px;
+            font-weight: 700;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+            opacity: 0.6;
+        }
+
+        /* QR-код – статичный */
+        .qr-code {
+            position: absolute;
+            top: 110px;
+            left: 80px; /* сдвигаем правее, чтобы не упирался в край экрана */
+            width: 118px;
+            height: 118px;
+            z-index: 11;
+            filter: drop-shadow(0 12px 22px rgba(0, 0, 0, 0.45));
+            opacity: 0.9;
+            animation: none !important;
+            transform: none !important;
+        }
+
+        .qr-code img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            border-radius: 10px;
+            animation: none !important;
+            transform: none !important;
+        }
+
+        /* Медиа-зона */
+        .media-zone {
+            grid-row: 1;
+            min-height: 0;
+            background: rgba(12, 12, 30, 0.65);
+            position: relative;
+            overflow: hidden;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .media-zone::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(
+                180deg,
+                rgba(0, 0, 0, 0.45) 0%,
+                rgba(0, 0, 0, 0.1) 45%,
+                rgba(0, 0, 0, 0.55) 100%
+            );
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .media-zone video,
+        .media-zone img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform-origin: center center;
+            transform: translate(0, 0) scale(1);
+        }
+
+        .fallback-motion {
+            animation: cinematicFallback 6s ease-in-out infinite;
+        }
+
+        @keyframes cinematicFallback {
+            0% {
+                transform: scale(1) translate(0, 0);
+            }
+            50% {
+                transform: scale(1.035) translate(-10px, -10px);
+            }
+            100% {
+                transform: scale(1) translate(0, 0);
+            }
+        }
+
+        /* Титульный блок */
+        .title-watermark {
+            position: absolute;
+            bottom: 22px;
+            left: 80px;  /* увеличенный отступ от левого края для безопасной зоны */
+            right: 80px;
+            padding: 20px 30px;
+            font-size: 56px;
+            font-weight: 700;
+            line-height: 1.28;
+            text-align: center;
+            color: #ffffff;
+            background: linear-gradient(135deg, rgba(255, 217, 0, 0.25), rgba(255, 233, 125, 0.3));
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            box-shadow:
+                0 10px 28px rgba(0, 0, 0, 0.5),
+                0 0 34px rgba(255, 215, 0, 0.25),
+                0 0 62px rgba(255, 215, 0, 0.15);
+            text-shadow:
+                0 0 12px rgba(0, 0, 0, 0.85),
+                0 0 26px rgba(0, 0, 0, 0.65),
+                2px 2px 6px rgba(0, 0, 0, 0.55);
+            -webkit-backdrop-filter: blur(7px);
+            backdrop-filter: blur(7px);
+            z-index: 12;
+        }
+
+        /* Содержание */
+        .content-area {
+            grid-row: 2;
+            min-height: 0;
+            padding: 24px 80px; /* синхронизируем с title-watermark (left/right = 80px) */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+            background: linear-gradient(180deg, rgba(16, 24, 48, 0.55) 0%, rgba(10, 12, 28, 0.85) 100%);
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            -webkit-backdrop-filter: blur(32px);
+            backdrop-filter: blur(32px);
+        }
+
+        /* Карточка для текстовой зоны - статичный размер */
+        .content-line {
+            width: 100%; /* совпадает по ширине с желтым блоком (с учётом padding родителя) */
+            height: 80%; /* Статичная высота относительно content-area */
+            padding: 45px 55px;
+            border-radius: 20px;
+            font-weight: 700;
+            line-height: 1.35;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.95);
+            background: linear-gradient(135deg, rgba(217, 4, 41, 0.92) 0%, rgba(176, 3, 31, 0.98) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow:
+                0 8px 24px rgba(217, 4, 41, 0.4),
+                0 4px 8px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            position: relative;
+            overflow: hidden;
+            opacity: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .content-line .text-content {
+            width: 100%;
+            height: 100%;
+            max-width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            white-space: pre-wrap;
+            text-align: center;
+            line-height: 1.35;
+            overflow: hidden; /* исключаем выход текста за рамки карточки */
+        }
+
+        /* Футер с кнопками */
+        .footer-area {
+            grid-row: 3;
+            height: 128px;
+            box-sizing: border-box;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 35px;
+            background: linear-gradient(180deg, rgba(10, 12, 28, 0.95) 0%, rgba(5, 8, 20, 1) 100%);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            -webkit-backdrop-filter: blur(32px);
+            backdrop-filter: blur(32px);
+            position: relative;
+            z-index: 15;
+        }
+        /* Пустой спейсер, если нужно зарезервировать низ кадра без визуального футера */
+        .footer-spacer {
+            grid-row: 3;
+            height: 120px;
+            min-height: 120px;
+            background: transparent;
+            border: none;
+            pointer-events: none;
+        }
+
+        /* Кнопка лайка */
+        .like-wrapper {
+            --gap: 0.5em;
+            --radius: 0.5em;
+            display: flex;
+            align-items: center;
+            text-align: center;
+            justify-content: center;
+            --dot-bg: #212121;
+            --dot-color: #313131;
+            --dot-size: 1px;
+            --dot-space: 22px;
+            background: linear-gradient(
+                    90deg,
+                    var(--dot-bg) calc(var(--dot-space) - var(--dot-size)),
+                    transparent 1%
+                )
+                center / var(--dot-space) var(--dot-space),
+                linear-gradient(
+                    var(--dot-bg) calc(var(--dot-space) - var(--dot-size)),
+                    transparent 1%
+                )
+                center / var(--dot-space) var(--dot-space),
+                var(--dot-color);
+            border: 0.1em solid #313131;
+            padding: 0.6em 1.2em;
+            border-radius: var(--radius);
+            box-shadow: 0 0 1em 0.5em rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .like-wrapper:hover {
+            transform: scale(1.05);
+        }
+
+        .check[type="checkbox"] {
+            display: none;
+        }
+
+        .like-container {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .like-icon {
+            width: 1.8em;
+            height: 1.8em;
+            margin-left: 0.5em;
+            fill: white;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        .like-icon.active {
+            display: none;
+            fill: #f52121;
+        }
+
+        .check[type="checkbox"]:checked + .like-container .like-icon.active {
+            display: inline-block;
+            animation: wiggle 0.5s ease-in-out;
+        }
+
+        .check[type="checkbox"]:checked + .like-container .like-icon.inactive {
+            display: none;
+        }
+
+        .like-text {
+            margin-left: 0.5em;
+            padding: 0.5em;
+            color: white;
+            font-family: 'Arsenal', sans-serif;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        @keyframes wiggle {
+            0%, 100% {
+                transform: rotate(0deg);
+            }
+            25% {
+                transform: rotate(-10deg);
+            }
+            50% {
+                transform: rotate(10deg);
+            }
+            75% {
+                transform: rotate(-10deg);
+            }
+        }
+
+        /* Кнопка подписки */
+        .subscribe-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5em;
+            padding: 0.6em 1.5em;
+            background: linear-gradient(135deg, #ff0000 0%, #cc0000 100%);
+            border: 0.1em solid rgba(255, 255, 255, 0.2);
+            border-radius: 0.5em;
+            color: white;
+            font-family: 'Arsenal', sans-serif;
+            font-weight: 700;
+            font-size: 18px;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 4px 12px rgba(255, 0, 0, 0.3);
+        }
+
+        .subscribe-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 16px rgba(255, 0, 0, 0.4);
+        }
+
+        .subscribe-icon {
+            width: 1.2em;
+            height: 1.2em;
+            fill: white;
+        }
+
+        .content-line::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -110%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                90deg,
+                rgba(255, 255, 255, 0),
+                rgba(255, 255, 255, 0.2),
+                rgba(255, 255, 255, 0)
+            );
+            transition: left 0.6s ease;
+        }
+
+        .content-line:hover::before {
+            left: 110%;
+        }
+
+        /* Убираем горизонтальные смещения, чтобы края совпадали с желтым блоком */
+        .content-line { transform: none; }
+
+        /* Fallback анимации */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(40px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes cinematicFallback {
+            0% {
+                transform: scale(1) translate(0, 0);
+            }
+            50% {
+                transform: scale(1.035) translate(-10px, -10px);
+            }
+            100% {
+                transform: scale(1) translate(0, 0);
+            }
+        }
+
+        /* Фоновые анимации */
+        @keyframes gradientFlow {
+            0% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        @keyframes driftOne {
+            0% {
+                transform: translate(0, 0) scale(1);
+            }
+            100% {
+                transform: translate(180px, -160px) scale(1.15);
+            }
+        }
+
+        @keyframes driftTwo {
+            0% {
+                transform: translate(0, 0) scale(1);
+            }
+            100% {
+                transform: translate(-160px, 140px) scale(1.2);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="background-glass"></div>
+    <div class="background-grid"></div>
+
+    <!-- Медиа-зона -->
+    <div class="media-zone" id="mediaZone">
+        <div class="header-controls">
+            <div class="source-watermark" id="sourceWatermark">{{SOURCE_NAME}}</div>
+            <div class="header-actions">
+                <!-- Кнопка лайка -->
+                <div class="like-wrapper">
+                    <input class="check" type="checkbox" id="like-toggle" />
+                    <label class="like-container" for="like-toggle">
+                        <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" class="like-icon inactive">
+                            <path d="M225.8 468.2l-2.5-2.3L48.1 303.2C17.4 274.7 0 234.7 0 192.8v-3.3c0-70.4 50-130.8 119.2-144C158.6 37.9 198.9 47 231 69.6c9 6.4 17.4 13.8 25 22.3c4.2-4.8 8.7-9.2 13.5-13.3c3.7-3.2 7.5-6.2 11.5-9c0 0 0 0 0 0C313.1 47 353.4 37.9 392.8 45.4C462 58.6 512 119.1 512 189.5v3.3c0 41.9-17.4 81.9-48.1 110.4L288.7 465.9l-2.5 2.3c-8.2 7.6-19 11.9-30.2 11.9s-22-4.2-30.2-11.9zM239.1 145c-.4-.3-.7-.7-1-1.1l-17.8-20c0 0-.1-.1-.1-.1c0 0 0 0 0 0c-23.1-25.9-58-37.7-92-31.2C81.6 101.5 48 142.1 48 189.5v3.3c0 28.5 11.9 55.8 32.8 75.2L256 430.7 431.2 268c20.9-19.4 32.8-46.7 32.8-75.2v-3.3c0-47.3-33.6-88-80.1-96.9c-34-6.5-69 5.4-92 31.2c0 0 0 0-.1 .1s0 0-.1 .1l-17.8 20c-.3 .4-.7 .7-1 1.1c-4.5 4.5-10.6 7-16.9 7s-12.4-2.5-16.9-7z"></path>
+                        </svg>
+                        <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" class="like-icon active">
+                            <path d="M47.6 300.4L228.3 469.1c7.5 7 17.4 10.9 27.7 10.9s20.2-3.9 27.7-10.9L464.4 300.4c30.4-28.3 47.6-68 47.6-109.5v-5.8c0-69.9-50.5-129.5-119.4-141C347 36.5 300.6 51.4 268 84L256 96 244 84c-32.6-32.6-79-47.5-124.6-39.9C50.5 55.6 0 115.2 0 185.1v5.8c0 41.5 17.2 81.2 47.6 109.5z"></path>
+                        </svg>
+                        <span class="like-text">Like</span>
+                    </label>
+                </div>
+                <!-- Кнопка подписки -->
+                <button class="subscribe-button" type="button">
+                    <svg class="subscribe-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M10 16.5l6-4.5-6-4.5v9zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
+                    </svg>
+                    <span>Subscribe</span>
+                </button>
+            </div>
+        </div>
+        <div class="qr-code" id="qrCode" style="display: none;">
+            <img src="{{QR_CODE_PATH}}" alt="QR Code" id="qrImage">
+        </div>
+        <div class="title-watermark" id="titleWatermark">{{NEWS_TITLE}}</div>
+
+        <video id="mediaVideo" autoplay loop muted playsinline style="display: none;">
+            <source src="{{NEWS_VIDEO}}" type="video/mp4">
+        </video>
+        <img id="mediaImage" src="{{NEWS_IMAGE}}" alt="News media" style="display: none;">
+    </div>
+
+    <!-- Контент -->
+    <div class="content-area" id="contentArea"></div>
+    <!-- Пустой футер‑спейсер для корректной посадки красной карточки -->
+    <div class="footer-spacer" aria-hidden="true"></div>
+
+    <script>
+        const GSAP_LOADED = typeof gsap !== 'undefined';
+
+        function setupCinematicMotion(target) {
+            if (!target) {
+                return;
+            }
+
+            target.classList.remove('fallback-motion');
+            target.style.transformOrigin = 'center center';
+            target.style.transform = 'translate(0px, 0px) scale(1)';
+            target.style.transition = 'none';
+
+            if (window.__cinematicTimeline) {
+                try {
+                    window.__cinematicTimeline.kill();
+                } catch (err) {
+                    console.warn('Failed to kill previous cinematic timeline', err);
+                }
+                window.__cinematicTimeline = null;
+            }
+
+            if (GSAP_LOADED) {
+                gsap.set(target, { x: 0, y: 0, scale: 1 });
+                const tl = gsap.timeline({
+                    repeat: -1,
+                    defaults: {
+                        ease: 'sine.inOut'
+                    }
+                });
+
+                tl.to(target, {
+                    duration: 3,
+                    scale: 1.033,
+                    x: -16,
+                    y: -11,
+                    rotation: 0.08
+                }).to(target, {
+                    duration: 3,
+                    scale: 1,
+                    x: 0,
+                    y: 0,
+                    rotation: 0
+                });
+
+                window.__cinematicTimeline = tl;
+                window.__cinematicDuration = 6;
+                window.__cinematicTarget = target;
+                tl.play(0);
+            } else {
+                target.classList.add('fallback-motion');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const mediaVideo = document.getElementById('mediaVideo');
+            const mediaImage = document.getElementById('mediaImage');
+            const mediaZone = document.getElementById('mediaZone');
+
+            const videoSource = mediaVideo.getElementsByTagName('source')[0];
+            const videoSrc = videoSource ? videoSource.getAttribute('src') : '';
+            const imageSrc = mediaImage.getAttribute('src');
+
+            if (videoSrc) {
+                mediaVideo.style.display = 'block';
+                mediaVideo.style.visibility = 'visible';
+                mediaVideo.style.opacity = '1';
+                console.log('Displaying video:', videoSrc);
+
+                mediaVideo.addEventListener('loadeddata', function() {
+                    console.log('Video loaded successfully');
+                    mediaVideo.style.opacity = '1';
+                    mediaVideo.playbackRate = 1.0;
+                    mediaVideo.loop = true;
+                    console.log('Video duration:', mediaVideo.duration, 'seconds');
+                    setupCinematicMotion(mediaVideo);
+                });
+
+                mediaVideo.addEventListener('error', function(e) {
+                    console.error('Video load error:', e);
+                });
+
+                if (mediaVideo.readyState >= 2) {
+                    setupCinematicMotion(mediaVideo);
+                }
+            } else if (imageSrc) {
+                mediaImage.style.display = 'block';
+                mediaImage.style.visibility = 'visible';
+                mediaImage.style.opacity = '1';
+                console.log('Displaying image:', imageSrc);
+
+                mediaImage.addEventListener('load', function() {
+                    console.log('Image loaded successfully');
+                    mediaImage.style.opacity = '1';
+                    setupCinematicMotion(mediaImage);
+                });
+
+                mediaImage.addEventListener('error', function(e) {
+                    console.error('Image load error:', e);
+                });
+
+                if (mediaImage.complete) {
+                    setupCinematicMotion(mediaImage);
+                }
+            } else {
+                console.warn('No media source found');
+            }
+
+            const qrCode = document.getElementById('qrCode');
+            const qrImage = document.getElementById('qrImage');
+            const qrSrc = qrImage ? qrImage.getAttribute('src') : '';
+
+            if (qrSrc && qrSrc.trim() !== '') {
+                qrCode.style.display = 'block';
+                qrImage.addEventListener('load', function() {
+                    console.log('QR code loaded successfully');
+                });
+                qrImage.addEventListener('error', function(e) {
+                    console.error('QR code load error:', e);
+                    qrCode.style.display = 'none';
+                });
+            } else {
+                console.warn('No QR code source found');
+                qrCode.style.display = 'none';
+            }
+
+            /**
+             * Автоматически масштабирует шрифт текста, чтобы заполнить
+             * всю доступную область контейнера (по ширине И высоте)
+             */
+            function autoFitText(container, text, minFontSize = 24, maxFontSize = 120) {
+                // Создаем временный элемент для измерения
+                const measureDiv = document.createElement('div');
+                measureDiv.style.position = 'absolute';
+                measureDiv.style.visibility = 'hidden';
+                measureDiv.style.whiteSpace = 'pre-wrap';
+                measureDiv.style.wordWrap = 'break-word';
+                measureDiv.style.fontFamily = window.getComputedStyle(container).fontFamily;
+                measureDiv.style.fontWeight = window.getComputedStyle(container).fontWeight;
+                measureDiv.style.lineHeight = '1.35';
+                measureDiv.textContent = text;
+                document.body.appendChild(measureDiv);
+                
+                // Получаем размеры контейнера (с учетом padding)
+                const containerStyle = window.getComputedStyle(container);
+                const paddingX = parseFloat(containerStyle.paddingLeft) + parseFloat(containerStyle.paddingRight);
+                const paddingY = parseFloat(containerStyle.paddingTop) + parseFloat(containerStyle.paddingBottom);
+                
+                // Получаем доступные ширину и высоту
+                const maxWidth = container.offsetWidth - paddingX;
+                const maxHeight = container.offsetHeight - paddingY;
+                
+                console.log(`Container size: ${maxWidth}x${maxHeight}`);
+                
+                // Бинарный поиск оптимального размера шрифта
+                let low = minFontSize;
+                let high = maxFontSize;
+                let bestSize = minFontSize;
+                
+                while (low <= high) {
+                    const mid = Math.floor((low + high) / 2);
+                    measureDiv.style.fontSize = mid + 'px';
+                    measureDiv.style.width = maxWidth + 'px';
+                    
+                    // Принудительно пересчитываем layout
+                    void measureDiv.offsetHeight;
+                    
+                    // Измеряем размеры текста
+                    const textWidth = measureDiv.offsetWidth;
+                    const textHeight = measureDiv.offsetHeight;
+                    
+                    console.log(`Font ${mid}px: ${textWidth}x${textHeight} (limit: ${maxWidth}x${maxHeight})`);
+                    
+                    // Проверяем, помещается ли текст по обоим измерениям (с небольшим запасом)
+                    if (textWidth <= maxWidth && textHeight <= maxHeight * 0.95) {
+                        bestSize = mid;
+                        low = mid + 1; // Пробуем больший размер
+                    } else {
+                        high = mid - 1; // Текст не помещается, уменьшаем
+                    }
+                }
+                
+                // Удаляем временный элемент
+                document.body.removeChild(measureDiv);
+                
+                // Создаем финальный элемент с текстом
+                const textSpan = document.createElement('div');
+                textSpan.className = 'text-content';
+                textSpan.textContent = text;
+                textSpan.style.fontSize = bestSize + 'px';
+                container.appendChild(textSpan);
+                
+                console.log(`Final font size: ${bestSize}px`);
+                
+                return bestSize;
+            }
+
+            const contentArea = document.getElementById('contentArea');
+            const briefText = `{{NEWS_BRIEF}}`;
+            // Объединяем весь текст в одну карточку
+            const fullText = briefText.replace(/\\n/g, '\n').trim();
+
+            if (fullText) {
+                // Создаем одну большую карточку
+                const cardDiv = document.createElement('div');
+                cardDiv.className = 'content-line';
+                contentArea.appendChild(cardDiv);
+                
+                // Ждем полного рендера карточки с фиксированными размерами
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        const fontSize = autoFitText(cardDiv, fullText, 24, 120);
+                        console.log(`Card font-size = ${fontSize}px`);
+                    });
+                });
+            }
+
+            if (GSAP_LOADED) {
+                console.log('✅ GSAP loaded, using premium animations');
+
+                gsap.from('.header-controls', {
+                    y: -28,
+                    duration: 0.85,
+                    ease: 'power3.out',
+                    immediateRender: false
+                });
+
+                gsap.from('#mediaZone', {
+                    scale: 1.05,
+                    duration: 1,
+                    ease: 'power2.out',
+                    delay: 0.1,
+                    immediateRender: false
+                });
+
+                // Анимацию появления карточки отключаем, чтобы избежать "скачка"
+                // Карточка будет появляться статично после вычисления размера шрифта
+            } else {
+                console.log('⚠️ GSAP not loaded, elements visible by default');
+            }
+
+            const mediaElement = mediaVideo.style.display !== 'none' ? mediaVideo : mediaImage;
+
+            if (mediaElement && GSAP_LOADED) {
+                gsap.to(mediaElement, {
+                    opacity: 1,
+                    duration: 0.5,
+                    ease: 'power2.out',
+                    delay: 0.2
+                });
+            }
+        });
+
+        window.addEventListener('error', function(e) {
+            if (e.message && e.message.includes('gsap')) {
+                console.warn('GSAP failed to load, using CSS animations');
+            }
+        });
+    </script>
+</body>
+</html>

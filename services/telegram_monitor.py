@@ -19,7 +19,12 @@ async def start_telegram_watcher(config: dict, on_message: Callable[[str | None,
     channel = config['TELEGRAM']['channel']
 
     bot_token = os.getenv('TELEGRAM_BOT_TOKEN', '').strip()
-    session_file = 'telethon_session_bot' if bot_token else 'telethon_session'
+    # Используем кастомное имя сессии, если оно задано (для изоляции тестов)
+    custom_session = os.getenv('TELEGRAM_SESSION_NAME', '').strip()
+    if custom_session:
+        session_file = custom_session
+    else:
+        session_file = 'telethon_session_bot' if bot_token else 'telethon_session'
     session_name = str(Path(config['PATHS']['state_dir']) / session_file)
     client = TelegramClient(session_name, api_id, api_hash)
 

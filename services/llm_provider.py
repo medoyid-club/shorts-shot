@@ -13,6 +13,19 @@ from typing import Any, Dict
 from google import genai
 from google.api_core import retry
 
+# Импортируем наши улучшения
+import sys
+import os
+sys.path.append(r'D:\work\shorts_news\scripts')
+
+try:
+    from llm_processor import GeminiProvider as EnhancedGeminiProvider
+    ENHANCED_LLM_AVAILABLE = True
+    print("Улучшенный LLM провайдер доступен")
+except ImportError as e:
+    ENHANCED_LLM_AVAILABLE = False
+    print(f"Улучшенный LLM провайдер недоступен: {e}")
+
 logger = logging.getLogger("llm")
 
 # Убираем настройки безопасности пока не разберемся с правильным синтаксисом
@@ -39,13 +52,31 @@ def create_llm_provider(config: dict) -> "GeminiProvider":
     backup_key = os.getenv('GEMINI_API_KEY_BACKUP', '')
     third_key = os.getenv('GEMINI_API_KEY_OTHER_BACKUP', '')
     fourth_key = os.getenv('GEMINI_API_KEY_BILLING', '')
-    return GeminiProvider(
-        api_key=primary_key,
-        backup_api_key=backup_key,
-        third_api_key=third_key,
-        fourth_api_key=fourth_key,
-        model=config['LLM'].get('gemini_model', 'gemini-2.0-flash')
-    )
+
+    # Используем улучшенный провайдер если доступен
+    if ENHANCED_LLM_AVAILABLE:
+        logger.info("🚀 Используем улучшенный LLM провайдер с Google Search Grounding")
+        llm_config = {
+            'enable_fact_checking': True,
+            'grounding_temperature': 0.3,
+            'fact_check_threshold': 0.7,
+            'temperature': 0.7,
+            'max_tokens': 2000
+        }
+        return EnhancedGeminiProvider(
+            api_key=primary_key,
+            model=config['LLM'].get('gemini_model', 'gemini-2.0-flash'),
+            config=llm_config
+        )
+    else:
+        logger.info("📝 Используем стандартный LLM провайдер")
+        return GeminiProvider(
+            api_key=primary_key,
+            backup_api_key=backup_key,
+            third_api_key=third_key,
+            fourth_api_key=fourth_key,
+            model=config['LLM'].get('gemini_model', 'gemini-2.0-flash')
+        )
 
 
 @dataclass
