@@ -12,6 +12,7 @@ venv/
 .env.*
 !example.env
 token.json
+token1.json
 client_secret_*.json
 state/*.session
 state/*.session-journal
@@ -43,7 +44,11 @@ Thumbs.db
 # Sensitive files
 .env
 token.json
+token1.json
 client_secret_*.json
+
+# Local scripts
+check_env.ps1
 
 # Generated content
 outputs/

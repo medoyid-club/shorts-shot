@@ -177,6 +177,26 @@ sudo systemctl start telegram-shorts
 sudo journalctl -u telegram-shorts -f
 ```
 
+#### Быстрое восстановление YouTube OAuth токена
+
+Если сервис падает с ошибками OAuth (`could not locate runnable browser`, проблемы с `token.json`), используйте отдельную инструкцию:
+
+- `YOUTUBE_TOKEN_RUNBOOK.md`
+
+Коротко:
+
+1. Остановить сервис:
+```bash
+sudo systemctl stop telegram-shorts
+```
+2. Пройти процедуру получения нового `token.json` по runbook.
+3. Проверить токен (`valid=True`, `refresh=True`).
+4. Запустить сервис и проверить логи:
+```bash
+sudo systemctl start telegram-shorts
+sudo journalctl -u telegram-shorts -n 120 -f -o short-iso
+```
+
 ### Откат на V1 (если что-то пошло не так)
 
 **На сервере:**

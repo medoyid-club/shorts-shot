@@ -186,11 +186,24 @@ async def main():
 
     logger.info("🚀 Starting Telegram watcher...")
 
+    message_queue: asyncio.Queue[tuple[str | None, str | None]] = asyncio.Queue()
+
+    async def queue_worker():
+        while True:
+            text, media_path = await message_queue.get()
+            try:
+                logger.info("🧵 Processing queued message. Queue size=%s", message_queue.qsize())
+                await process_message(text, media_path, config, uploader, composer, twitter, telegram_publisher)
+            except Exception as e:
+                logger.exception("❌ Failed to process queued message: %s", e)
+            finally:
+                message_queue.task_done()
+
+    asyncio.create_task(queue_worker())
+
     async def handler(text: str | None, media_path: str | None):
-        try:
-            await process_message(text, media_path, config, uploader, composer, twitter, telegram_publisher)
-        except Exception as e:
-            logger.exception("❌ Failed to process message: %s", e)
+        await message_queue.put((text, media_path))
+        logger.info("📥 Message queued. Queue size=%s", message_queue.qsize())
 
     await start_telegram_watcher(config, handler)
 
