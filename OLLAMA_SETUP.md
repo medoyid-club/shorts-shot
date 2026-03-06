@@ -127,7 +127,7 @@ ollama run gpt-oss-20b-MXFP4
    [LLM]
    # Переключитесь на ollama
    provider = ollama
-   gemini_model = gemini-2.0-flash-exp
+   gemini_model = gemini-2.5-flash
    
    # Настройки Ollama
    ollama_model = gpt-oss-20b-MXFP4

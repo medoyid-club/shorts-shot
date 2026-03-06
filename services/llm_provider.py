@@ -65,7 +65,7 @@ def create_llm_provider(config: dict) -> "GeminiProvider":
         }
         return EnhancedGeminiProvider(
             api_key=primary_key,
-            model=config['LLM'].get('gemini_model', 'gemini-2.0-flash'),
+            model=config['LLM'].get('gemini_model', 'gemini-2.5-flash'),
             config=llm_config
         )
     else:
@@ -75,7 +75,7 @@ def create_llm_provider(config: dict) -> "GeminiProvider":
             backup_api_key=backup_key,
             third_api_key=third_key,
             fourth_api_key=fourth_key,
-            model=config['LLM'].get('gemini_model', 'gemini-2.0-flash')
+            model=config['LLM'].get('gemini_model', 'gemini-2.5-flash')
         )
 
 
@@ -85,7 +85,7 @@ class GeminiProvider:
     backup_api_key: str = ''
     third_api_key: str = ''
     fourth_api_key: str = ''
-    model: str = 'gemini-2.0-flash'
+    model: str = 'gemini-2.5-flash'
     current_api_key: str = ''  # Текущий используемый ключ
     used_keys: list = None  # Список уже использованных ключей
     exhausted_keys_timestamp: dict = None  # Время когда ключи были исчерпаны

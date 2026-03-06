@@ -14,7 +14,7 @@ poll_interval_seconds = 10
 
 [LLM]
 provider = gemini
-gemini_model = gemini-2.0-flash-exp
+gemini_model = gemini-2.5-flash
 
 [VIDEO]
 duration_seconds = 5

@@ -13,20 +13,31 @@ import google.generativeai as genai
 
 logger = logging.getLogger("llm_v2")
 
+SUPPORTED_GEMINI_MODELS = ('gemini-2.5-flash', 'gemini-2.5-flash-lite')
+DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
 # Модели, доступные для fallback (в порядке приоритета)
-# Примечание: gemini-1.5-flash больше не поддерживается
-# gemini-2.5-flash и gemini-2.0-flash-lite могут быть доступны на free tier
-FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro']
+FALLBACK_MODELS = list(SUPPORTED_GEMINI_MODELS)
 
 
 class GeminiProviderV2:
     """Gemini провайдер для генерации новостного контента (V2)"""
     
-    def __init__(self, api_key: str, model: str = 'gemini-2.0-flash'):
+    def __init__(self, api_key: str, model: str = DEFAULT_GEMINI_MODEL):
         self.api_key = api_key
-        self.original_model = model
-        self.model = model
-        self.fallback_models = [m for m in FALLBACK_MODELS if m != model]
+        normalized_model = (model or DEFAULT_GEMINI_MODEL).strip()
+        if normalized_model not in SUPPORTED_GEMINI_MODELS:
+            logger.warning(
+                "⚠️ Модель '%s' не поддерживается. Разрешены только %s. "
+                "Переключаемся на %s.",
+                normalized_model,
+                ', '.join(SUPPORTED_GEMINI_MODELS),
+                DEFAULT_GEMINI_MODEL,
+            )
+            normalized_model = DEFAULT_GEMINI_MODEL
+
+        self.original_model = normalized_model
+        self.model = normalized_model
+        self.fallback_models = [m for m in FALLBACK_MODELS if m != normalized_model]
         # Системная инструкция: украинский копирайтер с живым тоном
         self.system_instruction = (
             """
@@ -67,11 +78,7 @@ class GeminiProviderV2:
         # Настраиваем API ключ для google-generativeai
         genai.configure(api_key=self.api_key)
         
-        logger.info(f"🤖 GeminiProviderV2 инициализирован: {model}")
-        if model.startswith('gemini-2.0') and 'lite' not in model:
-            logger.warning(f"⚠️ Модель {model} может быть недоступна на бесплатном тарифе (free tier limit = 0).")
-            logger.warning(f"💡 Для free tier рекомендуется: gemini-2.5-flash или gemini-2.0-flash-lite")
-            logger.warning(f"💡 Или включите биллинг в Google Cloud Console для использования gemini-2.0-flash")
+        logger.info(f"🤖 GeminiProviderV2 инициализирован: {self.model}")
     
     def _is_quota_error(self, error: Exception) -> Tuple[bool, Optional[float]]:
         """Проверяет, является ли ошибка ошибкой квоты (429) и извлекает retry_delay"""
@@ -98,6 +105,11 @@ class GeminiProviderV2:
             return True
         
         return False
+
+    def _is_location_error(self, error: Exception) -> bool:
+        """Проверяет, блокируется ли запрос по региону (гео-ограничение API)."""
+        error_str = str(error).lower()
+        return "user location is not supported" in error_str
     
     def _try_fallback_model(self) -> Optional[str]:
         """Пробует переключиться на fallback модель"""
@@ -135,6 +147,14 @@ class GeminiProviderV2:
             
         except Exception as e:
             error_str = str(e)
+
+            if self._is_location_error(e):
+                logger.error("❌ Gemini API недоступен из текущей локации: %s", error_str[:250])
+                logger.error("💡 Проверьте, что VPN активен на сервере и трафик приложения идет через VPN.")
+                raise RuntimeError(
+                    "Gemini API blocked by region. "
+                    "Проверьте ExpressVPN (подключение и маршрут по умолчанию)."
+                )
             
             # Проверяем на проблему с API ключом (критичная ошибка, не retry)
             if self._is_api_key_error(e):
@@ -277,7 +297,7 @@ def create_llm_provider_v2(config: dict) -> GeminiProviderV2:
         GeminiProviderV2 instance
     """
     api_key = os.getenv('GEMINI_API_KEY', '')
-    model = config['LLM'].get('gemini_model', 'gemini-2.0-flash')
+    model = config['LLM'].get('gemini_model', DEFAULT_GEMINI_MODEL)
     
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY не установлен в environment")

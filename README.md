@@ -127,7 +127,7 @@ heartbeat_enabled = true
 heartbeat_cycle_seconds = 1.6
 
 [LLM]
-gemini_model = gemini-2.0-flash-exp
+gemini_model = gemini-2.5-flash
 
 [YOUTUBE]
 privacy_status = private
@@ -208,7 +208,7 @@ sudo journalctl -u telegram-shorts.service -f
 ## Устранение неполадок
 
 ### Проблемы с квотами Gemini
-- Используйте `gemini-2.0-flash-exp` вместо `gemini-1.5-flash`
+- Используйте только `gemini-2.5-flash` или `gemini-2.5-flash-lite`
 - Проверьте лимиты на [Google AI Studio](https://aistudio.google.com/)
 
 ### Проблемы с Telegram
