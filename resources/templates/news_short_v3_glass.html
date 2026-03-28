@@ -90,10 +90,10 @@
             top: 20px;
             left: 20px;
             right: 20px;
-            padding-left: 64px;  /* больше отступ слева: SOURCE_NAME правее */
-            padding-right: 64px; /* больше отступ справа: кнопки левее */
+            padding-left: 20px;
+            padding-right: 64px; /* отступ справа: кнопки левее */
             display: flex;
-            justify-content: space-between;
+            justify-content: flex-end;
             align-items: center;
             z-index: 11;
         }
@@ -102,45 +102,6 @@
             display: flex;
             align-items: center;
             gap: 20px;
-        }
-
-        /* Водяной знак источника */
-        .source-watermark {
-            /* position, top, left, z-index are now handled by .header-controls */
-            background: linear-gradient(135deg, rgba(0, 0, 0, 0.82), rgba(32, 32, 32, 0.72));
-            -webkit-backdrop-filter: blur(12px);
-            backdrop-filter: blur(12px);
-            color: rgba(255, 255, 255, 0.85);
-            padding: 12px 24px;
-            font-size: 36px;
-            font-weight: 700;
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
-            opacity: 0.6;
-        }
-
-        /* QR-код – статичный */
-        .qr-code {
-            position: absolute;
-            top: 110px;
-            left: 80px; /* сдвигаем правее, чтобы не упирался в край экрана */
-            width: 118px;
-            height: 118px;
-            z-index: 11;
-            filter: drop-shadow(0 12px 22px rgba(0, 0, 0, 0.45));
-            opacity: 0.9;
-            animation: none !important;
-            transform: none !important;
-        }
-
-        .qr-code img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            border-radius: 10px;
-            animation: none !important;
-            transform: none !important;
         }
 
         /* Медиа-зона */
@@ -512,7 +473,6 @@
     <!-- Медиа-зона -->
     <div class="media-zone" id="mediaZone">
         <div class="header-controls">
-            <div class="source-watermark" id="sourceWatermark">{{SOURCE_NAME}}</div>
             <div class="header-actions">
                 <!-- Кнопка лайка -->
                 <div class="like-wrapper">
@@ -535,9 +495,6 @@
                     <span>Subscribe</span>
                 </button>
             </div>
-        </div>
-        <div class="qr-code" id="qrCode" style="display: none;">
-            <img src="{{QR_CODE_PATH}}" alt="QR Code" id="qrImage">
         </div>
         <div class="title-watermark" id="titleWatermark">{{NEWS_TITLE}}</div>
 
@@ -658,24 +615,6 @@
                 }
             } else {
                 console.warn('No media source found');
-            }
-
-            const qrCode = document.getElementById('qrCode');
-            const qrImage = document.getElementById('qrImage');
-            const qrSrc = qrImage ? qrImage.getAttribute('src') : '';
-
-            if (qrSrc && qrSrc.trim() !== '') {
-                qrCode.style.display = 'block';
-                qrImage.addEventListener('load', function() {
-                    console.log('QR code loaded successfully');
-                });
-                qrImage.addEventListener('error', function(e) {
-                    console.error('QR code load error:', e);
-                    qrCode.style.display = 'none';
-                });
-            } else {
-                console.warn('No QR code source found');
-                qrCode.style.display = 'none';
             }
 
             /**

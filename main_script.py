@@ -89,7 +89,7 @@ async def process_message(text: str | None, media_path: str | None, config: dict
         short_text=short_text,
         media_path=media_path,
         output_path=str(output_path),
-        source_text=config['VIDEO'].get('source_text', 't.me/source')
+        source_text=config['VIDEO'].get('source_text', '')
     )
     logger.info("Video composed: %s", video_path)
 

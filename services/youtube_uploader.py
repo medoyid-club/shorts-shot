@@ -43,7 +43,16 @@ class YouTubeUploader:
                     creds = None
             if not creds:
                 flow = InstalledAppFlow.from_client_secrets_file(self.client_secret_file, SCOPES)
-                creds = flow.run_local_server(port=0)
+                # Под systemd нет браузера и интерактива — не вызываем run_local_server (иначе
+                # webbrowser / вечное ожидание callback). Создай token.json вручную: YOUTUBE_TOKEN_RUNBOOK.md
+                if os.environ.get("INVOCATION_ID"):
+                    raise RuntimeError(
+                        "YouTube OAuth: отсутствует или недействителен token.json (или refresh отклонён). "
+                        "Остановите сервис: sudo systemctl stop telegram-shorts, "
+                        "создайте token.json по инструкции YOUTUBE_TOKEN_RUNBOOK.md, "
+                        "затем: sudo systemctl start telegram-shorts"
+                    )
+                creds = flow.run_local_server(port=0, open_browser=False)
             with open(self.token_path, 'wb') as token:
                 pickle.dump(creds, token)
         # Создаем YouTube service с улучшенными настройками для надежности

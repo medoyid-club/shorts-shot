@@ -14,7 +14,7 @@ from PIL import Image
 import io
 import shutil
 import subprocess
-from typing import Optional, Union
+from typing import List, Optional, Union
 import base64
 
 from selenium.webdriver.common.by import By
@@ -37,8 +37,13 @@ class VideoComposerV2:
         self.fps = int(v.get('v2_fps', 30))
         self.duration = int(v.get('v2_duration_seconds', 6)) # Убедимся, что по умолчанию 6 секунд
         
-        # Пути
-        self.template_path = v.get('v2_template_path', 'resources/templates/news_short_v2.html')
+        # Пути: один шаблон или пул (случайный выбор на каждый ролик) — см. v2_template_pool в config.ini
+        self._template_candidates = self._build_template_candidates(v)
+        self.template_path = (
+            self._template_candidates[0]
+            if self._template_candidates
+            else v.get('v2_template_path', 'resources/templates/news_short_v2.html')
+        )
         self.temp_dir = config['PATHS'].get('tmp_dir', 'resources/tmp')
         self.outputs_dir = config['PATHS'].get('outputs_dir', 'outputs')
         
@@ -47,8 +52,49 @@ class VideoComposerV2:
         
         # Selenium driver - отложенная инициализация
         self.driver = None
+        if len(self._template_candidates) > 1:
+            logger.info(
+                "🎨 Пул шаблонов V2: %s файлов (каждый ролик — случайный выбор)",
+                len(self._template_candidates),
+            )
         logger.info(f"🎬 VideoComposerV2 инициализирован: headless={self.headless}")
-    
+
+    def _build_template_candidates(self, v: dict) -> List[str]:
+        """
+        Список путей к HTML шаблонам. Если задан v2_template_pool (через запятую),
+        используются только существующие файлы. Иначе — один v2_template_path.
+        """
+        raw = (v.get("v2_template_pool") or "").strip()
+        out: List[str] = []
+        if raw:
+            for part in raw.split(","):
+                p = part.strip()
+                if not p:
+                    continue
+                pl = Path(p)
+                if pl.is_file():
+                    out.append(str(pl))
+                else:
+                    logger.warning("⚠️ Шаблон из v2_template_pool не найден: %s", p)
+        if out:
+            return out
+        single = v.get("v2_template_path", "resources/templates/news_short_v2.html")
+        sp = Path(single)
+        if sp.is_file():
+            return [str(sp)]
+        logger.warning("⚠️ Основной шаблон v2_template_path не найден: %s", single)
+        return [str(sp)]
+
+    def _pick_template_path(self) -> str:
+        """Случайный шаблон из пула (равномерно)."""
+        if not self._template_candidates:
+            return self.template_path
+        if len(self._template_candidates) == 1:
+            return self._template_candidates[0]
+        chosen = str(np.random.choice(self._template_candidates))
+        logger.info("🎨 Выбран шаблон: %s", chosen)
+        return chosen
+
     def _setup_selenium(self):
         """Настройка Selenium WebDriver (отложенная инициализация)"""
         # Проверяем, что браузер существует и сессия активна
@@ -176,13 +222,8 @@ class VideoComposerV2:
             elif ext in ['.jpg', '.jpeg', '.png', '.webp']:
                 news_image = media_uri
 
-        # Обработка QR кода
-        qr_path = Path(self.config['PATHS'].get('resources_dir', 'resources')) / 'QR' / 'telegram.png'
+        # QR и водяной знак источника отключены в шаблоне v3_glass; плейсхолдеры оставлены пустыми для совместимости
         qr_uri = ''
-        if qr_path.exists():
-            qr_uri = qr_path.resolve().as_uri()
-        else:
-            logger.warning(f"⚠️ QR код не найден: {qr_path}")
 
         replacements = {
             '{{NEWS_TITLE}}': title,
@@ -456,6 +497,7 @@ try {
             'source_text': source_text,
         }
 
+        self.template_path = self._pick_template_path()
         temp_html_path = self._create_html_from_template(video_data)
         
         try:
