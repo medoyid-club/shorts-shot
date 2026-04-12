@@ -42,8 +42,10 @@ CURRENT POLITICAL TITLES (as of 2025-2026) — USE THESE, NOT OUTDATED ONES:
 - Volodymyr Zelenskyy = President of Ukraine / Президент України.
 
 WRITING RULES
-- title: 15–25 words, lively and energetic, active voice, Ukrainian only, no emojis/hashtags/links.
-  Create intrigue: What happened? Why does it matter? What's the impact?
+- title: **On-screen headline for a vertical 9:16 Short** (narrow text block, large font). It MUST fit in roughly **2 lines** on a phone-width card.
+  **Hard limits (Ukrainian): max ~75–85 characters, OR max 9–10 words** — whichever is shorter. One clear idea; no long subordinate clauses after a colon.
+  If the story is complex, state only the core news hook here; put context, names of straits, and details into **summary**, not into title.
+  Style: lively, energetic, active voice, Ukrainian only, no emojis/hashtags/links.
 - summary: 2–3 short sentences (<= 220 characters total), lively but factual.
   Write like a compelling news narrator — factual but captivating.
   Use strong verbs and vivid language while staying accurate.
@@ -61,6 +63,7 @@ QUOTES POLICY
 - If the source contains a direct quote, include one key quote in the output (in the summary or description).
 - If the quote is not in Ukrainian, translate it to natural Ukrainian preserving the exact meaning and tone.
 - Always keep quotes in quotation marks. Do NOT add emojis or extra commentary inside quotes.
+- In **summary**, prefer Ukrainian guillemets **«...»** (or **„...“**) around direct speech so quotes remain visually distinct in the Shorts layout.
 
 CONTEXT
 Source name: {{SOURCE_NAME}}

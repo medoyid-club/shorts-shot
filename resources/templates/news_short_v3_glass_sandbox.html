@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<!-- Шаблон песочницы: карточка на базе Uiverse.io (Kagamiie), адаптировано под {{NEWS_*}} -->
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>News Short — Card Sandbox</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <style>
+        /* Noto Sans — чіткіша кирилиця на відео; DM Sans/Arsenal — заголовок */
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@9..40,400;500;600;700&family=Arsenal:wght@700&family=Noto+Sans:wght@500;600;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 1080px;
+            height: 1920px;
+            overflow: hidden;
+            font-family: 'DM Sans', 'Arsenal', system-ui, sans-serif;
+            color: #1a1a1e;
+            background:
+                radial-gradient(1200px 800px at 20% 15%, rgba(180, 160, 255, 0.35), transparent 55%),
+                radial-gradient(900px 700px at 85% 75%, rgba(255, 190, 120, 0.28), transparent 50%),
+                linear-gradient(165deg, #f0f2f8 0%, #e8ecf4 45%, #dde3ee 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 20px 44px 56px;
+            position: relative;
+        }
+
+        /* Лёгкая сетка — редакционный фон */
+        body::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(90deg, rgba(80, 90, 120, 0.06) 1px, transparent 1px),
+                linear-gradient(rgba(80, 90, 120, 0.06) 1px, transparent 1px);
+            background-size: 48px 48px;
+            opacity: 0.5;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .shorts-root {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 984px;
+            flex: 1 1 auto;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            min-height: 0;
+            padding-top: 0;
+        }
+
+        /* Адаптация Uiverse card → вертикальный Short */
+        .card {
+            width: 100%;
+            max-width: 920px;
+            border-radius: 20px;
+            background: #ffffff;
+            color: #1a1a1e;
+            box-shadow:
+                rgba(50, 50, 93, 0.22) 0px 36px 72px -24px,
+                rgba(0, 0, 0, 0.28) 0px 28px 56px -32px,
+                rgba(255, 255, 255, 0.85) 0px 1px 0px inset;
+            overflow: visible;
+            display: flex;
+            flex-direction: column;
+            max-height: none;
+        }
+
+        .card-img {
+            position: relative;
+            flex: 0 0 auto;
+            height: 800px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 16px 24px 0;
+        }
+
+        .card-imgs {
+            width: 100%;
+            height: 100%;
+            max-height: 760px;
+            border-radius: 14px;
+            overflow: hidden;
+            position: relative;
+            box-shadow:
+                rgba(149, 157, 165, 0.35) 0px 12px 32px -8px,
+                rgba(0, 0, 0, 0.12) 0px 4px 16px -4px;
+            transition: transform 0.45s ease;
+        }
+
+        .card-imgs video,
+        .card-imgs img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            transform-origin: center center;
+        }
+
+        .media-placeholder {
+            display: none;
+            width: 100%;
+            height: 100%;
+            min-height: 400px;
+            background: linear-gradient(135deg, #c4b5fd 0%, #a5b4fc 40%, #fda4af 100%);
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.92);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .media-placeholder.is-visible {
+            display: flex;
+        }
+
+        .project-info {
+            padding: 36px 36px 44px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            position: relative;
+            flex: 1 1 auto;
+            min-height: 500px;
+        }
+
+        .flex.title-row {
+            display: flex;
+            justify-content: flex-start;
+            align-items: flex-start;
+            gap: 16px;
+            width: 100%;
+        }
+
+        /* Заголовок + спиннер слева (Uiverse.io / satyamchaudharydev) */
+        .title-with-spinner {
+            display: flex;
+            align-items: flex-start;
+            gap: 18px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        /* From Uiverse.io by satyamchaudharydev — компактнее под 9:16 */
+        .spinner {
+            --size: 26px;
+            --first-block-clr: #005bba;
+            --second-block-clr: #fed500;
+            flex-shrink: 0;
+            width: 88px;
+            height: 88px;
+            position: relative;
+            margin-top: 6px;
+        }
+
+        .spinner::after,
+        .spinner::before {
+            box-sizing: border-box;
+            position: absolute;
+            content: "";
+            width: var(--size);
+            height: var(--size);
+            top: 50%;
+            /* Період 2.4s має збігатися з SPINNER_PERIOD у video_generator_v2 (покадровий захват) */
+            animation: spinner-up 2.4s cubic-bezier(0, 0, 0.24, 1.21) infinite;
+            left: 50%;
+            background: var(--first-block-clr);
+        }
+
+        .spinner::after {
+            background: var(--second-block-clr);
+            top: calc(50% - var(--size));
+            left: calc(50% - var(--size));
+            animation: spinner-down 2.4s cubic-bezier(0, 0, 0.24, 1.21) infinite;
+        }
+
+        @keyframes spinner-down {
+            0%, 100% { transform: none; }
+            25% { transform: translateX(100%); }
+            50% { transform: translateX(100%) translateY(100%); }
+            75% { transform: translateY(100%); }
+        }
+
+        @keyframes spinner-up {
+            0%, 100% { transform: none; }
+            25% { transform: translateX(-100%); }
+            50% { transform: translateX(-100%) translateY(-100%); }
+            75% { transform: translateY(-100%); }
+        }
+
+        .project-title {
+            font-family: 'Arsenal', 'DM Sans', sans-serif;
+            font-weight: 700;
+            font-size: clamp(48px, 5.5vw, 72px);
+            line-height: 1.12;
+            color: #111118;
+            flex: 1;
+            min-width: 0;
+            display: -webkit-box;
+            -webkit-line-clamp: 4;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* Розділювач між заголовком і брифом */
+        .title-brief-divider {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            width: 100%;
+            padding: 4px 0 10px;
+            flex-shrink: 0;
+        }
+
+        .title-brief-divider__line {
+            flex: 1;
+            height: 2px;
+            border-radius: 2px;
+            background: linear-gradient(
+                90deg,
+                rgba(99, 102, 241, 0),
+                rgba(99, 102, 241, 0.35) 20%,
+                rgba(244, 114, 182, 0.4) 80%,
+                rgba(244, 114, 182, 0)
+            );
+        }
+
+        .title-brief-divider__mark {
+            flex-shrink: 0;
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+            transform: rotate(45deg);
+            background: linear-gradient(145deg, #6366f1 0%, #a855f7 55%, #f472b6 100%);
+            box-shadow:
+                0 0 0 2px rgba(255, 255, 255, 0.95),
+                0 2px 8px rgba(99, 102, 241, 0.35);
+        }
+
+        .brief-holder {
+            flex: 0 0 auto;
+            width: 100%;
+            min-width: 0;
+            height: 400px;
+            min-height: 220px;
+            max-height: 480px;
+            position: relative;
+            /* Контрастніший текст для читабельності після стиснення у відео */
+            color: #12121a;
+            font-family: 'Noto Sans', 'DM Sans', system-ui, sans-serif;
+        }
+
+        .brief-holder .text-content {
+            font-family: inherit;
+            font-weight: 600;
+            line-height: 1.48;
+            letter-spacing: 0.02em;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            text-rendering: optimizeLegibility;
+            -webkit-font-smoothing: subpixel-antialiased;
+        }
+
+        /* Цитати в брифі: жовтий маркер (як текстовий виділювач) */
+        .brief-holder .brief-mark {
+            font-weight: 600;
+            line-height: inherit;
+            background: linear-gradient(
+                180deg,
+                transparent 0.52em,
+                rgba(255, 236, 80, 0.92) 0.52em,
+                rgba(255, 236, 80, 0.92) 1.02em,
+                transparent 1.02em
+            );
+            border-radius: 2px;
+            box-decoration-break: clone;
+            -webkit-box-decoration-break: clone;
+            padding: 0 0.03em;
+        }
+
+        /* Під брифом — пульс-крапки (Uiverse.io / Fadhilmagass); 1.5s = LOADER_PERIOD у video_generator_v2 */
+        .brief-footer-loader {
+            width: 100%;
+            flex-shrink: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 12px 0 4px;
+            min-height: 48px;
+        }
+
+        .brief-footer-loader .loader {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+        }
+
+        .brief-footer-loader .dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            margin-right: 8px;
+            border-radius: 50%;
+            animation: dot-pulse-loader 1.5s ease-in-out infinite;
+        }
+
+        .brief-footer-loader .dot:last-child {
+            margin-right: 0;
+        }
+
+        .brief-footer-loader .dot-1 {
+            background-color: #4285f4;
+            animation-delay: 0s;
+        }
+
+        .brief-footer-loader .dot-2 {
+            background-color: #34a853;
+            animation-delay: 0.3s;
+        }
+
+        .brief-footer-loader .dot-3 {
+            background-color: #fbbc05;
+            animation-delay: 0.6s;
+        }
+
+        .brief-footer-loader .dot-4 {
+            background-color: #ea4335;
+            animation-delay: 0.9s;
+        }
+
+        .brief-footer-loader .dot-5 {
+            background-color: #4285f4;
+            animation-delay: 1.2s;
+        }
+
+        @keyframes dot-pulse-loader {
+            0% {
+                transform: scale(0.5);
+                opacity: 0.5;
+            }
+            50% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(0.5);
+                opacity: 0.5;
+            }
+        }
+
+        /* Нижняя декоративная полоска */
+        .card-accent {
+            height: 6px;
+            background: linear-gradient(90deg, #8b5cf6, #6366f1, #f472b6);
+            opacity: 0.85;
+        }
+
+        /*
+         * П’ять кольорових тем (v2-theme-1 … 5) — випадковий вибір у video_generator_v2.
+         * Базові стилі вище = тема 1; нижче — перевизначення для різноманіття кадру.
+         */
+        body.v2-theme-1::before {
+            background-image:
+                linear-gradient(90deg, rgba(80, 90, 120, 0.06) 1px, transparent 1px),
+                linear-gradient(rgba(80, 90, 120, 0.06) 1px, transparent 1px);
+        }
+
+        body.v2-theme-2 {
+            color: #152028;
+            background:
+                radial-gradient(1100px 720px at 18% 12%, rgba(120, 200, 255, 0.38), transparent 55%),
+                radial-gradient(880px 680px at 88% 78%, rgba(56, 189, 248, 0.22), transparent 52%),
+                linear-gradient(168deg, #e8f4fc 0%, #dceef8 48%, #cfe8f2 100%);
+        }
+        body.v2-theme-2::before {
+            background-image:
+                linear-gradient(90deg, rgba(50, 100, 140, 0.07) 1px, transparent 1px),
+                linear-gradient(rgba(50, 100, 140, 0.07) 1px, transparent 1px);
+        }
+        body.v2-theme-2 .media-placeholder {
+            background: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 45%, #6366f1 100%);
+        }
+        body.v2-theme-2 .spinner {
+            --first-block-clr: #0369a1;
+            --second-block-clr: #7dd3fc;
+        }
+        body.v2-theme-2 .title-brief-divider__line {
+            background: linear-gradient(
+                90deg,
+                rgba(14, 165, 233, 0),
+                rgba(14, 165, 233, 0.38) 22%,
+                rgba(99, 102, 241, 0.42) 78%,
+                rgba(99, 102, 241, 0)
+            );
+        }
+        body.v2-theme-2 .title-brief-divider__mark {
+            background: linear-gradient(145deg, #0ea5e9 0%, #2563eb 52%, #6366f1 100%);
+            box-shadow:
+                0 0 0 2px rgba(255, 255, 255, 0.95),
+                0 2px 8px rgba(14, 165, 233, 0.35);
+        }
+        body.v2-theme-2 .brief-holder .brief-mark {
+            background: linear-gradient(
+                180deg,
+                transparent 0.52em,
+                rgba(186, 230, 253, 0.95) 0.52em,
+                rgba(186, 230, 253, 0.95) 1.02em,
+                transparent 1.02em
+            );
+        }
+        body.v2-theme-2 .brief-footer-loader .dot-1 { background-color: #0284c7; }
+        body.v2-theme-2 .brief-footer-loader .dot-2 { background-color: #0d9488; }
+        body.v2-theme-2 .brief-footer-loader .dot-3 { background-color: #2563eb; }
+        body.v2-theme-2 .brief-footer-loader .dot-4 { background-color: #38bdf8; }
+        body.v2-theme-2 .brief-footer-loader .dot-5 { background-color: #0369a1; }
+        body.v2-theme-2 .card-accent {
+            background: linear-gradient(90deg, #0ea5e9, #6366f1, #38bdf8);
+        }
+
+        body.v2-theme-3 {
+            color: #221a18;
+            background:
+                radial-gradient(1000px 760px at 22% 18%, rgba(255, 180, 140, 0.42), transparent 54%),
+                radial-gradient(920px 700px at 80% 72%, rgba(251, 146, 60, 0.26), transparent 50%),
+                linear-gradient(165deg, #fff4ed 0%, #ffe8dc 46%, #ffd8c8 100%);
+        }
+        body.v2-theme-3::before {
+            background-image:
+                linear-gradient(90deg, rgba(160, 90, 70, 0.055) 1px, transparent 1px),
+                linear-gradient(rgba(160, 90, 70, 0.055) 1px, transparent 1px);
+        }
+        body.v2-theme-3 .media-placeholder {
+            background: linear-gradient(135deg, #fb923c 0%, #f97316 42%, #f43f5e 100%);
+        }
+        body.v2-theme-3 .spinner {
+            --first-block-clr: #c2410c;
+            --second-block-clr: #fcd34d;
+        }
+        body.v2-theme-3 .title-brief-divider__line {
+            background: linear-gradient(
+                90deg,
+                rgba(234, 88, 12, 0),
+                rgba(234, 88, 12, 0.36) 22%,
+                rgba(244, 114, 182, 0.4) 78%,
+                rgba(244, 114, 182, 0)
+            );
+        }
+        body.v2-theme-3 .title-brief-divider__mark {
+            background: linear-gradient(145deg, #ea580c 0%, #f97316 50%, #fb7185 100%);
+            box-shadow:
+                0 0 0 2px rgba(255, 255, 255, 0.95),
+                0 2px 8px rgba(234, 88, 12, 0.32);
+        }
+        body.v2-theme-3 .brief-holder .brief-mark {
+            background: linear-gradient(
+                180deg,
+                transparent 0.52em,
+                rgba(255, 220, 150, 0.95) 0.52em,
+                rgba(255, 220, 150, 0.95) 1.02em,
+                transparent 1.02em
+            );
+        }
+        body.v2-theme-3 .brief-footer-loader .dot-1 { background-color: #ea580c; }
+        body.v2-theme-3 .brief-footer-loader .dot-2 { background-color: #f97316; }
+        body.v2-theme-3 .brief-footer-loader .dot-3 { background-color: #fb7185; }
+        body.v2-theme-3 .brief-footer-loader .dot-4 { background-color: #fbbf24; }
+        body.v2-theme-3 .brief-footer-loader .dot-5 { background-color: #c2410c; }
+        body.v2-theme-3 .card-accent {
+            background: linear-gradient(90deg, #f97316, #fb7185, #fbbf24);
+        }
+
+        body.v2-theme-4 {
+            color: #14241a;
+            background:
+                radial-gradient(1050px 740px at 20% 14%, rgba(134, 239, 172, 0.38), transparent 54%),
+                radial-gradient(900px 680px at 82% 76%, rgba(52, 211, 153, 0.24), transparent 52%),
+                linear-gradient(168deg, #ecfdf3 0%, #dff7e8 47%, #d0f0dc 100%);
+        }
+        body.v2-theme-4::before {
+            background-image:
+                linear-gradient(90deg, rgba(50, 120, 80, 0.065) 1px, transparent 1px),
+                linear-gradient(rgba(50, 120, 80, 0.065) 1px, transparent 1px);
+        }
+        body.v2-theme-4 .media-placeholder {
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 45%, #059669 100%);
+        }
+        body.v2-theme-4 .spinner {
+            --first-block-clr: #166534;
+            --second-block-clr: #86efac;
+        }
+        body.v2-theme-4 .title-brief-divider__line {
+            background: linear-gradient(
+                90deg,
+                rgba(22, 163, 74, 0),
+                rgba(22, 163, 74, 0.36) 22%,
+                rgba(52, 211, 153, 0.42) 78%,
+                rgba(52, 211, 153, 0)
+            );
+        }
+        body.v2-theme-4 .title-brief-divider__mark {
+            background: linear-gradient(145deg, #16a34a 0%, #22c55e 52%, #4ade80 100%);
+            box-shadow:
+                0 0 0 2px rgba(255, 255, 255, 0.95),
+                0 2px 8px rgba(22, 163, 74, 0.32);
+        }
+        body.v2-theme-4 .brief-holder .brief-mark {
+            background: linear-gradient(
+                180deg,
+                transparent 0.52em,
+                rgba(220, 252, 231, 0.98) 0.52em,
+                rgba(220, 252, 231, 0.98) 1.02em,
+                transparent 1.02em
+            );
+        }
+        body.v2-theme-4 .brief-footer-loader .dot-1 { background-color: #15803d; }
+        body.v2-theme-4 .brief-footer-loader .dot-2 { background-color: #22c55e; }
+        body.v2-theme-4 .brief-footer-loader .dot-3 { background-color: #4ade80; }
+        body.v2-theme-4 .brief-footer-loader .dot-4 { background-color: #059669; }
+        body.v2-theme-4 .brief-footer-loader .dot-5 { background-color: #166534; }
+        body.v2-theme-4 .card-accent {
+            background: linear-gradient(90deg, #22c55e, #10b981, #4ade80);
+        }
+
+        body.v2-theme-5 {
+            color: #1c1530;
+            background:
+                radial-gradient(1100px 780px at 16% 12%, rgba(196, 181, 253, 0.45), transparent 56%),
+                radial-gradient(940px 720px at 86% 80%, rgba(167, 139, 250, 0.28), transparent 52%),
+                linear-gradient(168deg, #f3e8ff 0%, #ede4ff 46%, #e4d9fc 100%);
+        }
+        body.v2-theme-5::before {
+            background-image:
+                linear-gradient(90deg, rgba(90, 70, 140, 0.06) 1px, transparent 1px),
+                linear-gradient(rgba(90, 70, 140, 0.06) 1px, transparent 1px);
+        }
+        body.v2-theme-5 .media-placeholder {
+            background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 42%, #d946ef 100%);
+        }
+        body.v2-theme-5 .spinner {
+            --first-block-clr: #6d28d9;
+            --second-block-clr: #e9d5ff;
+        }
+        body.v2-theme-5 .title-brief-divider__line {
+            background: linear-gradient(
+                90deg,
+                rgba(139, 92, 246, 0),
+                rgba(139, 92, 246, 0.38) 22%,
+                rgba(217, 70, 239, 0.4) 78%,
+                rgba(217, 70, 239, 0)
+            );
+        }
+        body.v2-theme-5 .title-brief-divider__mark {
+            background: linear-gradient(145deg, #7c3aed 0%, #a855f7 52%, #e879f9 100%);
+            box-shadow:
+                0 0 0 2px rgba(255, 255, 255, 0.95),
+                0 2px 8px rgba(124, 58, 237, 0.35);
+        }
+        body.v2-theme-5 .brief-holder .brief-mark {
+            background: linear-gradient(
+                180deg,
+                transparent 0.52em,
+                rgba(237, 233, 254, 0.98) 0.52em,
+                rgba(237, 233, 254, 0.98) 1.02em,
+                transparent 1.02em
+            );
+        }
+        body.v2-theme-5 .brief-footer-loader .dot-1 { background-color: #7c3aed; }
+        body.v2-theme-5 .brief-footer-loader .dot-2 { background-color: #a855f7; }
+        body.v2-theme-5 .brief-footer-loader .dot-3 { background-color: #c026d3; }
+        body.v2-theme-5 .brief-footer-loader .dot-4 { background-color: #e879f9; }
+        body.v2-theme-5 .brief-footer-loader .dot-5 { background-color: #6d28d9; }
+        body.v2-theme-5 .card-accent {
+            background: linear-gradient(90deg, #8b5cf6, #a855f7, #d946ef);
+        }
+    </style>
+</head>
+<body>
+    <!-- Текст брифа как JSON: без поломки кавычек/бэктиков внутри новости -->
+    <script type="application/json" id="news-brief-json">{{NEWS_BRIEF_JSON}}</script>
+
+    <div class="shorts-root">
+        <article class="card" id="mainCard">
+            <div class="card-img" id="mediaZone">
+                <div class="card-imgs media-slot" id="mediaSlot">
+                    <video id="mediaVideo" autoplay loop muted playsinline style="display: none;">
+                        <source src="{{NEWS_VIDEO}}" type="video/mp4">
+                    </video>
+                    <img id="mediaImage" src="{{NEWS_IMAGE}}" alt="" style="display: none;">
+                    <div class="media-placeholder" id="mediaPlaceholder" aria-hidden="true">Shorts</div>
+                </div>
+            </div>
+
+            <div class="project-info">
+                <div class="flex title-row">
+                    <div class="title-with-spinner">
+                        <!-- From Uiverse.io by satyamchaudharydev -->
+                        <div class="spinner" aria-hidden="true"></div>
+                        <div class="project-title" id="titleBlock">{{NEWS_TITLE}}</div>
+                    </div>
+                </div>
+
+                <div class="title-brief-divider" role="presentation" aria-hidden="true">
+                    <span class="title-brief-divider__line"></span>
+                    <span class="title-brief-divider__mark"></span>
+                    <span class="title-brief-divider__line"></span>
+                </div>
+
+                <div class="brief-holder" id="briefHolder"></div>
+
+                <!-- From Uiverse.io by Fadhilmagass -->
+                <div class="brief-footer-loader" aria-hidden="true">
+                    <div class="loader">
+                        <div class="dot dot-1"></div>
+                        <div class="dot dot-2"></div>
+                        <div class="dot dot-3"></div>
+                        <div class="dot dot-4"></div>
+                        <div class="dot dot-5"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-accent" aria-hidden="true"></div>
+        </article>
+    </div>
+
+    <script>
+        const GSAP_LOADED = typeof gsap !== 'undefined';
+
+        function setupCinematicMotion(target) {
+            if (!target) return;
+            target.classList.remove('fallback-motion');
+            target.style.transformOrigin = 'center center';
+            target.style.transform = 'translate(0px, 0px) scale(1)';
+            target.style.transition = 'none';
+
+            if (window.__cinematicTimeline) {
+                try { window.__cinematicTimeline.kill(); } catch (err) {}
+                window.__cinematicTimeline = null;
+            }
+
+            if (GSAP_LOADED) {
+                gsap.set(target, { x: 0, y: 0, scale: 1 });
+                const tl = gsap.timeline({ repeat: -1, defaults: { ease: 'sine.inOut' } });
+                tl.to(target, { duration: 3, scale: 1.028, x: -10, y: -8 })
+                  .to(target, { duration: 3, scale: 1, x: 0, y: 0 });
+                window.__cinematicTimeline = tl;
+                window.__cinematicDuration = 6;
+                window.__cinematicTarget = target;
+                tl.play(0);
+            }
+        }
+
+        /** Типові українські пари лапок у брифі: «…» та „…“ */
+        function fillBriefWithQuoteMarks(block, text) {
+            const re = /«[^»]*»|„[^“]*“/g;
+            let last = 0;
+            let m;
+            let found = false;
+            while ((m = re.exec(text)) !== null) {
+                found = true;
+                if (m.index > last) {
+                    block.appendChild(document.createTextNode(text.slice(last, m.index)));
+                }
+                const span = document.createElement('span');
+                span.className = 'brief-mark';
+                span.textContent = m[0];
+                block.appendChild(span);
+                last = re.lastIndex;
+            }
+            if (last < text.length) {
+                block.appendChild(document.createTextNode(text.slice(last)));
+            }
+            if (!found) {
+                block.textContent = text;
+            }
+        }
+
+        function autoFitText(container, text, minFontSize, maxFontSize) {
+            const measureDiv = document.createElement('div');
+            measureDiv.style.cssText = 'position:absolute;visibility:hidden;white-space:pre-wrap;word-wrap:break-word;';
+            measureDiv.style.fontFamily = window.getComputedStyle(container).fontFamily;
+            measureDiv.style.fontWeight = '600';
+            measureDiv.style.lineHeight = '1.48';
+            measureDiv.style.letterSpacing = '0.02em';
+            measureDiv.textContent = text;
+            document.body.appendChild(measureDiv);
+
+            const containerStyle = window.getComputedStyle(container);
+            const paddingX = parseFloat(containerStyle.paddingLeft) + parseFloat(containerStyle.paddingRight);
+            const paddingY = parseFloat(containerStyle.paddingTop) + parseFloat(containerStyle.paddingBottom);
+            let maxWidth = container.clientWidth - paddingX;
+            const maxHeight = container.clientHeight - paddingY;
+            /* До полного лэйаута (Selenium/headless) clientWidth может быть 0 */
+            if (maxWidth < 80) {
+                const card = document.getElementById('mainCard');
+                const w = card ? card.getBoundingClientRect().width : 920;
+                maxWidth = Math.max(320, w - 72 - paddingX);
+            }
+
+            let low = minFontSize;
+            let high = maxFontSize;
+            let bestSize = minFontSize;
+
+            while (low <= high) {
+                const mid = Math.floor((low + high) / 2);
+                measureDiv.style.fontSize = mid + 'px';
+                measureDiv.style.width = maxWidth + 'px';
+                void measureDiv.offsetHeight;
+                const tw = measureDiv.offsetWidth;
+                const th = measureDiv.offsetHeight;
+                if (tw <= maxWidth && th <= maxHeight * 0.96) {
+                    bestSize = mid;
+                    low = mid + 1;
+                } else {
+                    high = mid - 1;
+                }
+            }
+
+            document.body.removeChild(measureDiv);
+
+            const textSpan = document.createElement('div');
+            textSpan.className = 'text-content';
+            textSpan.style.fontSize = bestSize + 'px';
+            fillBriefWithQuoteMarks(textSpan, text);
+            container.appendChild(textSpan);
+            return bestSize;
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const mediaVideo = document.getElementById('mediaVideo');
+            const mediaImage = document.getElementById('mediaImage');
+            const placeholder = document.getElementById('mediaPlaceholder');
+            const videoSource = mediaVideo.getElementsByTagName('source')[0];
+            const videoSrc = videoSource ? videoSource.getAttribute('src') : '';
+            const imageSrc = mediaImage.getAttribute('src');
+
+            if (videoSrc) {
+                mediaVideo.style.display = 'block';
+                placeholder.classList.remove('is-visible');
+                mediaVideo.addEventListener('loadeddata', function() {
+                    setupCinematicMotion(mediaVideo);
+                });
+                mediaVideo.addEventListener('error', function() {});
+                if (mediaVideo.readyState >= 2) setupCinematicMotion(mediaVideo);
+            } else if (imageSrc) {
+                mediaImage.style.display = 'block';
+                placeholder.classList.remove('is-visible');
+                mediaImage.addEventListener('load', function() {
+                    setupCinematicMotion(mediaImage);
+                });
+                if (mediaImage.complete) setupCinematicMotion(mediaImage);
+            } else {
+                placeholder.classList.add('is-visible');
+            }
+
+            let fullText = '';
+            try {
+                const jsonEl = document.getElementById('news-brief-json');
+                if (jsonEl && jsonEl.textContent) {
+                    fullText = JSON.parse(jsonEl.textContent);
+                }
+            } catch (e) {
+                console.warn('news-brief-json parse failed', e);
+            }
+            if (typeof fullText !== 'string') {
+                fullText = '';
+            }
+            fullText = fullText.trim();
+            const briefHolder = document.getElementById('briefHolder');
+
+            function runBriefFit() {
+                if (fullText && briefHolder) {
+                    briefHolder.innerHTML = '';
+                    /* Мін. кегль вищий за замовчуванням — менше «крихіткого» тексту на Shorts */
+                    autoFitText(briefHolder, fullText, 28, 58);
+                }
+            }
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    runBriefFit();
+                    /* Повтор после лэйаута, если первая попытка дала нулевую ширину */
+                    setTimeout(runBriefFit, 50);
+                });
+            });
+
+            if (GSAP_LOADED) {
+                gsap.from('#mainCard', {
+                    y: 48,
+                    opacity: 0,
+                    duration: 0.95,
+                    ease: 'power3.out'
+                });
+                gsap.from('.card-img', {
+                    scale: 0.97,
+                    duration: 1,
+                    ease: 'power2.out',
+                    delay: 0.08
+                });
+            }
+        });
+    </script>
+</body>
+</html>

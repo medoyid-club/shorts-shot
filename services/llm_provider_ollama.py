@@ -4,12 +4,24 @@ Ollama LLM Provider - локальный провайдер для работы 
 import logging
 import json
 import asyncio
+import os
 from typing import Dict, Optional
 import httpx
 import re
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+def _log_ollama_unable_to_load(err_body: str, model: str) -> None:
+    if "unable to load model" in (err_body or "").lower():
+        logger.error(
+            "Ollama не загружает веса модели «%s»: проверьте путь к GGUF (часто Pinokio/LM Studio), "
+            "выполните `ollama pull %s` или смените sandbox_ollama_model / SANDBOX_OLLAMA_MODEL.",
+            model,
+            model,
+        )
+
 
 class OllamaProvider:
     """Локальный LLM провайдер через Ollama"""
@@ -36,37 +48,41 @@ class OllamaProvider:
             logger.error("💡 Убедитесь что Ollama запущен: ollama serve")
             return False
     
+    def _chat_payload(self, prompt: str, json_format: bool) -> dict:
+        """Тело POST /api/chat. format=json у многих моделей даёт HTTP 500 — по умолчанию выключен."""
+        p: dict = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+        }
+        if json_format:
+            p["format"] = "json"
+        return p
+
     async def _generate(self, prompt: str, max_retries: int = 2) -> str:
         """Отправляет запрос к Ollama API и возвращает текстовый ответ."""
         # Проверяем доступность Ollama
         if not await self._check_ollama_available():
             raise RuntimeError("Ollama сервер недоступен. Запустите: ollama serve")
-        
-        # Пробуем сначала новый API /api/chat
+
         endpoint = f"{self.base_url}/api/chat"
-        payload = {
-            "model": self.model,
-            "messages": [{"role": "user", "content": prompt}],
-            "stream": False,
-            "format": "json"
-        }
-        
+        # Только если явно: OLLAMA_USE_JSON_FORMAT=1 — иначе Gemma и др. часто падают с 500 на format=json
+        use_json = os.getenv("OLLAMA_USE_JSON_FORMAT", "").strip().lower() in ("1", "true", "yes", "on")
+
         logger.info(f"Отправляем запрос к Ollama ({len(prompt)} символов) на {endpoint}...")
 
         for attempt in range(max_retries):
             try:
-                # Используем клиент напрямую, без async with (он уже создан)
-                # Увеличиваем таймаут до 10 минут для больших моделей
+                payload = self._chat_payload(prompt, json_format=use_json)
                 response = await self.client.post(endpoint, json=payload, timeout=600.0)
                 response.raise_for_status()
-                
-                # Обработка ответа для /api/chat
+
                 data = response.json()
-                content = data.get('message', {}).get('content', '')
-                
+                content = data.get("message", {}).get("content", "")
+
                 logger.info(f"Получен ответ от Ollama: {len(content)} символов")
                 return content
-                
+
             except httpx.ReadTimeout:
                 if attempt < max_retries - 1:
                     wait_time = (attempt + 1) * 10
@@ -76,25 +92,45 @@ class OllamaProvider:
                     logger.error(f"❌ Таймаут после {max_retries} попыток. Модель {self.model} слишком медленная.")
                     logger.info("💡 Попробуйте использовать более быструю модель (например, llama3.2:3b)")
                     raise RuntimeError(f"Ollama таймаут: модель {self.model} слишком медленная. Попробуйте более быструю модель.")
-                    
+
             except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404:
-                    # Fallback на старый API /api/generate
+                if e.response is not None and e.response.status_code == 404:
                     logger.info("⚠️ /api/chat не найден, пробуем старый API /api/generate...")
                     return await self._generate_legacy(prompt)
+
+                err_snip = ""
+                if e.response is not None:
+                    try:
+                        err_snip = (e.response.text or "")[:800]
+                    except Exception:
+                        err_snip = str(e)
+
+                if e.response is not None and e.response.status_code >= 500:
+                    _log_ollama_unable_to_load(err_snip, self.model)
+                    logger.warning(
+                        "Ollama /api/chat HTTP %s: %s",
+                        e.response.status_code,
+                        err_snip or e,
+                    )
+                    if use_json:
+                        logger.info("Повтор /api/chat без format=json...")
+                        use_json = False
+                        continue
+                    logger.info("Пробуем /api/generate...")
+                    return await self._generate_legacy(prompt)
+
+                logger.warning(f"Попытка {attempt + 1}/{max_retries} не удалась: {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(5)
                 else:
-                    logger.warning(f"Попытка {attempt + 1}/{max_retries} не удалась: {e}")
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(5)
-                    else:
-                        raise
+                    raise
             except Exception as e:
                 logger.error(f"Неожиданная ошибка (попытка {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
                     await asyncio.sleep(5)
                 else:
                     raise
-        
+
         raise RuntimeError("Не удалось получить ответ от Ollama после всех попыток")
     
     async def _generate_legacy(self, prompt: str) -> str:
@@ -112,10 +148,16 @@ class OllamaProvider:
         }
         
         logger.info(f"Используем старый API: {endpoint}")
-        
-        # Используем клиент напрямую, без async with, с увеличенным таймаутом
-        response = await self.client.post(endpoint, json=payload, timeout=600.0)
-        response.raise_for_status()
+
+        try:
+            response = await self.client.post(endpoint, json=payload, timeout=600.0)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            err_txt = ""
+            if e.response is not None:
+                err_txt = (e.response.text or "")[:800]
+            _log_ollama_unable_to_load(err_txt, self.model)
+            raise
         
         data = response.json()
         content = data.get('response', '').strip()

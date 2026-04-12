@@ -118,14 +118,23 @@ def log_config_info(config: dict):
     
     # Безопасное получение значений из ConfigParser
     try:
-        llm_model = config['LLM']['gemini_model'] if 'LLM' in config and 'gemini_model' in config['LLM'] else 'N/A'
+        llm_sec = config.get('LLM', {})
+        llm_prov = (llm_sec.get('provider') or 'gemini').strip().lower()
+        if llm_prov == 'ollama':
+            llm_model = llm_sec.get('ollama_model') or 'N/A'
+            logger.info(f"   LLM: Ollama, модель: {llm_model}")
+        else:
+            llm_model = llm_sec.get('gemini_model') or 'N/A'
+            logger.info(f"   LLM: Gemini, модель: {llm_model}")
         video_duration = config['VIDEO']['duration_seconds'] if 'VIDEO' in config and 'duration_seconds' in config['VIDEO'] else 'N/A'
         video_width = config['VIDEO']['width'] if 'VIDEO' in config and 'width' in config['VIDEO'] else 'N/A'
         video_height = config['VIDEO']['height'] if 'VIDEO' in config and 'height' in config['VIDEO'] else 'N/A'
         youtube_category = config['YOUTUBE']['category_id'] if 'YOUTUBE' in config and 'category_id' in config['YOUTUBE'] else 'N/A'
         youtube_privacy = config['YOUTUBE']['privacy_status'] if 'YOUTUBE' in config and 'privacy_status' in config['YOUTUBE'] else 'N/A'
         
-        logger.info(f"   Модель LLM: {llm_model}")
+        local_only = str(config.get('GENERAL', {}).get('local_only', 'false')).strip().lower() in ('true', '1', 'yes', 'on')
+        if local_only:
+            logger.info("   Режим: local_only (песочница, без внешних загрузок)")
         logger.info(f"   Длительность видео: {video_duration}с")
         logger.info(f"   Размер видео: {video_width}x{video_height}")
         logger.info(f"   YouTube категория: {youtube_category}")

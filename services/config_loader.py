@@ -88,6 +88,12 @@ def load_config(project_root: Path) -> dict:
     if os.getenv('TELEGRAM_CHANNEL'):
         config['TELEGRAM']['channel'] = os.environ['TELEGRAM_CHANNEL']
 
+    # Песочница: только локальное видео в outputs/, без YouTube/Telegram публикации
+    if not config.has_section('GENERAL'):
+        config.add_section('GENERAL')
+    if os.getenv('LOCAL_ONLY', '').strip().lower() in ('1', 'true', 'yes', 'on'):
+        config['GENERAL']['local_only'] = 'true'
+
     # LLM
     if os.getenv('GEMINI_API_KEY'):
         # Stored in env only
@@ -102,6 +108,8 @@ def load_config(project_root: Path) -> dict:
     # Video
     if os.getenv('VIDEO_DURATION_SECONDS'):
         config['VIDEO']['duration_seconds'] = os.environ['VIDEO_DURATION_SECONDS']
+    if os.getenv('V2_SANDBOX_THEME_DEBUG', '').strip():
+        config['VIDEO']['v2_sandbox_theme_debug'] = os.environ['V2_SANDBOX_THEME_DEBUG'].strip()
 
     # Derived helpers
     config['VIDEO']['width'] = config['VIDEO'].get('width', '1080')
@@ -116,17 +124,63 @@ def load_config(project_root: Path) -> dict:
         }
     }
 
-    # Finalize critical paths
+    # Finalize critical paths (OAuth не нужен в режиме local_only)
+    def _local_only_mode() -> bool:
+        try:
+            v = config['GENERAL'].get('local_only', 'false').strip().lower()
+            if v in ('true', '1', 'yes', 'on'):
+                return True
+        except Exception:
+            pass
+        return os.getenv('LOCAL_ONLY', '').strip().lower() in ('1', 'true', 'yes', 'on')
+
     client_secret = config['YOUTUBE'].get('client_secret_file', '').strip()
     if not client_secret or client_secret.startswith('${'):
         auto = _find_client_secret_file(project_root)
         if auto:
             config['YOUTUBE']['client_secret_file'] = auto
-        else:
+        elif not _local_only_mode():
             raise RuntimeError(
                 "YouTube client secret file is not configured. Set YOUTUBE_CLIENT_SECRET_FILE in .env or "
-                "update [YOUTUBE].client_secret_file in config.ini."
+                "update [YOUTUBE].client_secret_file in config.ini. "
+                "For sandbox without uploads, set LOCAL_ONLY=1 in .env or local_only = true in [GENERAL]."
             )
+
+    if os.getenv('TELEGRAM_SHORTS_NEWS_PATH', '').strip():
+        if not config.has_section('GENERAL'):
+            config.add_section('GENERAL')
+        config['GENERAL']['telegram_shorts_news_path'] = os.environ['TELEGRAM_SHORTS_NEWS_PATH'].strip()
+
+    # Песочница (local_only): по умолчанию локальный LLM через Ollama (см. [LLM] sandbox_*)
+    if _local_only_mode():
+        if not config.has_section('LLM'):
+            config.add_section('LLM')
+        llm_env = os.getenv('LLM_PROVIDER', '').strip().lower()
+        env_disable_ollama = os.getenv('SANDBOX_USE_OLLAMA', '').strip().lower() in ('0', 'false', 'no', 'off')
+        use_sandbox_ollama = config['LLM'].get('sandbox_use_ollama', 'true').strip().lower() in (
+            'true', '1', 'yes', 'on'
+        )
+        if env_disable_ollama:
+            use_sandbox_ollama = False
+        if llm_env == 'gemini':
+            pass
+        elif llm_env == 'ollama':
+            model = (
+                os.getenv('OLLAMA_MODEL', '').strip()
+                or os.getenv('SANDBOX_OLLAMA_MODEL', '').strip()
+                or config['LLM'].get('sandbox_ollama_model', '').strip()
+            )
+            if model:
+                config['LLM']['ollama_model'] = model
+        elif use_sandbox_ollama:
+            config['LLM']['provider'] = 'ollama'
+            model = (
+                os.getenv('SANDBOX_OLLAMA_MODEL', '').strip()
+                or os.getenv('OLLAMA_MODEL', '').strip()
+                or config['LLM'].get('sandbox_ollama_model', '').strip()
+            )
+            if model:
+                config['LLM']['ollama_model'] = model
 
     # Конвертируем ConfigParser в ConfigDict для удобства использования
     result = ConfigDict()

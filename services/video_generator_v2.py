@@ -4,8 +4,10 @@
 """
 
 import asyncio
+import json
 import logging
 import os
+import re
 import time
 import cv2
 import numpy as np
@@ -49,6 +51,7 @@ class VideoComposerV2:
         
         # Настройки захвата
         self.headless = str(v.get('v2_headless', 'true')).lower() == 'true'
+        self._sandbox_theme_debug = self._parse_sandbox_theme_debug(v)
         
         # Selenium driver - отложенная инициализация
         self.driver = None
@@ -57,13 +60,72 @@ class VideoComposerV2:
                 "🎨 Пул шаблонов V2: %s файлов (каждый ролик — случайный выбор)",
                 len(self._template_candidates),
             )
+        if self._sandbox_theme_debug is not None:
+            logger.info(
+                "🎨 V2 цветовая тема зафиксирована для отладки: %s",
+                self._sandbox_theme_debug,
+            )
         logger.info(f"🎬 VideoComposerV2 инициализирован: headless={self.headless}")
+
+    @staticmethod
+    def _parse_sandbox_theme_debug(v: dict) -> Optional[int]:
+        """
+        Фиксированная тема 1..5 для отладки ([VIDEO] v2_sandbox_theme_debug или V2_SANDBOX_THEME_DEBUG).
+        Пусто / 0 / random — каждый ролик случайная тема.
+        """
+        raw = (
+            (os.environ.get("V2_SANDBOX_THEME_DEBUG") or "").strip()
+            or (v.get("v2_sandbox_theme_debug") or "").strip()
+        )
+        if not raw or raw.lower() in ("0", "random", "auto"):
+            return None
+        try:
+            n = int(raw)
+        except ValueError:
+            logger.warning(
+                "⚠️ v2_sandbox_theme_debug не число: %s — используем случайную тему",
+                raw,
+            )
+            return None
+        if n < 1 or n > 5:
+            logger.warning(
+                "⚠️ v2_sandbox_theme_debug должен быть 1..5, получено %s — случайная тема",
+                n,
+            )
+            return None
+        return n
+
+    @staticmethod
+    def _is_local_only(config: dict) -> bool:
+        v = str(config.get("GENERAL", {}).get("local_only", "false")).strip().lower()
+        if v in ("true", "1", "yes", "on"):
+            return True
+        return os.environ.get("LOCAL_ONLY", "").strip().lower() in ("1", "true", "yes", "on")
 
     def _build_template_candidates(self, v: dict) -> List[str]:
         """
         Список путей к HTML шаблонам. Если задан v2_template_pool (через запятую),
         используются только существующие файлы. Иначе — один v2_template_path.
+
+        В режиме песочницы (local_only / LOCAL_ONLY) при наличии файла
+        v2_sandbox_template_path (или переменной V2_SANDBOX_TEMPLATE_PATH)
+        используется только он.
         """
+        if self._is_local_only(self.config):
+            sandbox = (
+                (os.environ.get("V2_SANDBOX_TEMPLATE_PATH") or "").strip()
+                or (v.get("v2_sandbox_template_path") or "").strip()
+            )
+            if sandbox:
+                sp = Path(sandbox)
+                if sp.is_file():
+                    logger.info("🔶 Песочница: шаблон V2 — %s", sandbox)
+                    return [str(sp)]
+                logger.warning(
+                    "⚠️ v2_sandbox_template_path не найден: %s — используем обычный v2_template_path / pool",
+                    sandbox,
+                )
+
         raw = (v.get("v2_template_pool") or "").strip()
         out: List[str] = []
         if raw:
@@ -225,9 +287,15 @@ class VideoComposerV2:
         # QR и водяной знак источника отключены в шаблоне v3_glass; плейсхолдеры оставлены пустыми для совместимости
         qr_uri = ''
 
+        def _brief_json_for_html(s: str) -> str:
+            """JSON для <script type=\"application/json\">: без поломки </script> и кавычек в тексте."""
+            j = json.dumps(s or "", ensure_ascii=False)
+            return j.replace("<", "\\u003c")
+
         replacements = {
             '{{NEWS_TITLE}}': title,
-            '{{NEWS_BRIEF}}': summary.replace('\n', '\\n'), # Экранируем переносы для JS
+            '{{NEWS_BRIEF}}': summary.replace('\n', '\\n'),  # legacy: шаблоны с бэктиками
+            '{{NEWS_BRIEF_JSON}}': _brief_json_for_html(summary),
             '{{NEWS_IMAGE}}': news_image,
             '{{NEWS_VIDEO}}': news_video,
             '{{SOURCE_NAME}}': source_text,
@@ -236,6 +304,36 @@ class VideoComposerV2:
 
         for placeholder, value in replacements.items():
             html_content = html_content.replace(placeholder, str(value or ''))
+
+        # Покадровый захват: CSS-анимации (спиннер и т.д.) идут по wall-clock между скриншотами —
+        # ставим body.v2-capture и фазу через отрицательный animation-delay по виртуальному времени кадра.
+        _capture_spinner_css = """
+<style id="v2-frame-capture-css">
+body.v2-capture .spinner::before,
+body.v2-capture .spinner::after {
+    animation-play-state: paused !important;
+    animation-delay: var(--spin-delay, 0s) !important;
+}
+body.v2-capture .loader .dot {
+    animation-play-state: paused !important;
+    animation-delay: var(--dot-anim-delay, 0s) !important;
+}
+</style>
+"""
+        if "</head>" in html_content:
+            html_content = html_content.replace("</head>", _capture_spinner_css + "\n</head>", 1)
+        if self._sandbox_theme_debug is not None:
+            theme_id = self._sandbox_theme_debug
+            logger.info("🎨 V2 sandbox color theme: %s (debug)", theme_id)
+        else:
+            theme_id = int(np.random.randint(1, 6))
+            logger.info("🎨 V2 sandbox color theme: %s", theme_id)
+        html_content = re.sub(
+            r"<body\b[^>]*>",
+            f'<body class="v2-capture v2-theme-{theme_id}">',
+            html_content,
+            count=1,
+        )
 
         temp_html_path = Path(self.temp_dir) / f"temp_short_{int(time.time())}.html"
         temp_html_path.write_text(html_content, 'utf-8')
@@ -297,6 +395,28 @@ function finalize(success) {
         }
     } catch (err) {
         console.error('Timeline sync error', err);
+    }
+    try {
+        const SPINNER_PERIOD = 2.4;
+        let phase = clampedTime % SPINNER_PERIOD;
+        if (phase < 0) {
+            phase += SPINNER_PERIOD;
+        }
+        const delaySec = -phase;
+        document.querySelectorAll('.spinner').forEach(function (el) {
+            el.style.setProperty('--spin-delay', delaySec + 's');
+        });
+        const LOADER_PERIOD = 1.5;
+        const stagger = [0, 0.3, 0.6, 0.9, 1.2];
+        document.querySelectorAll('.loader .dot').forEach(function (dot, i) {
+            let ph = (clampedTime + (stagger[i] || 0)) % LOADER_PERIOD;
+            if (ph < 0) {
+                ph += LOADER_PERIOD;
+            }
+            dot.style.setProperty('--dot-anim-delay', (-ph) + 's');
+        });
+    } catch (err) {
+        console.error('Spinner phase sync', err);
     }
     callback(success);
 }

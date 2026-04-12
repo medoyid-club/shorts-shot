@@ -4,24 +4,28 @@ Telegram Publisher для публикации Shorts
 Заменяет YouTube публикацию на Telegram
 """
 
+from __future__ import annotations
+
 import os
 import sys
 import logging
-from typing import Dict, Optional
 from pathlib import Path
-
-# Импортируем наш Telegram Publisher
-sys.path.append(r'D:\work\shorts_news\scripts')
-
-try:
-    from telegram_publisher import TelegramPublisher as BaseTelegramPublisher
-    ENHANCED_PUBLISHER_AVAILABLE = True
-    print("✅ Улучшенный Telegram Publisher доступен")
-except ImportError as e:
-    ENHANCED_PUBLISHER_AVAILABLE = False
-    print(f"⚠️ Улучшенный Telegram Publisher недоступен: {e}")
+from typing import Optional
 
 logger = logging.getLogger("telegram_publisher")
+
+
+def _resolve_shorts_news_root(config: dict) -> Optional[Path]:
+    """Корень репозитория shorts_news: .env TELEGRAM_SHORTS_NEWS_PATH, затем [GENERAL].telegram_shorts_news_path."""
+    raw = (os.environ.get("TELEGRAM_SHORTS_NEWS_PATH") or "").strip()
+    if not raw:
+        raw = (config.get("GENERAL", {}) or {}).get("telegram_shorts_news_path", "") or ""
+    raw = str(raw).strip()
+    if not raw:
+        return None
+    p = Path(raw).expanduser()
+    return p if p.is_dir() else None
+
 
 class TelegramPublisher:
     """Простой Telegram Publisher для замены YouTube"""
@@ -30,15 +34,36 @@ class TelegramPublisher:
         self.config = config
         self.publisher = None
 
-        if ENHANCED_PUBLISHER_AVAILABLE:
-            try:
-                self.publisher = BaseTelegramPublisher(r'D:\work\shorts_news\config\config.yaml')
-                logger.info("🚀 Используем улучшенный Telegram Publisher")
-            except Exception as e:
-                logger.error(f"❌ Ошибка создания улучшенного publisher: {e}")
-                self.publisher = None
+        root = _resolve_shorts_news_root(config)
+        if root is not None:
+            scripts = root / "scripts"
+            if scripts.is_dir():
+                sp = str(scripts.resolve())
+                if sp not in sys.path:
+                    sys.path.insert(0, sp)
+                try:
+                    from telegram_publisher import TelegramPublisher as BaseTelegramPublisher
+
+                    cfg_yaml = root / "config" / "config.yaml"
+                    if cfg_yaml.is_file():
+                        self.publisher = BaseTelegramPublisher(str(cfg_yaml))
+                        logger.info("🚀 Используем улучшенный Telegram Publisher (%s)", root)
+                    else:
+                        logger.warning(
+                            "⚠️ shorts_news: нет %s — расширенный publisher не создан",
+                            cfg_yaml,
+                        )
+                except ImportError as e:
+                    logger.warning("Enhanced Telegram Publisher unavailable: %s", e)
+                except Exception as e:
+                    logger.error("❌ Ошибка создания улучшенного publisher: %s", e)
+                    self.publisher = None
+            else:
+                logger.warning("⚠️ shorts_news scripts не найдены: %s", scripts)
         else:
-            logger.info("📝 Улучшенный publisher недоступен, используем базовый")
+            logger.info(
+                "📝 Улучшенный publisher: задайте telegram_shorts_news_path или TELEGRAM_SHORTS_NEWS_PATH"
+            )
 
     async def upload_video(self, video_path: str, title: str, description: str,
                           tags: list = None, privacy: str = "public") -> bool:

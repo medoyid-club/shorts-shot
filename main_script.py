@@ -14,7 +14,23 @@ from services.logger_config import setup_logging, log_system_info, log_config_in
 logger = logging.getLogger("main")
 
 
-async def process_message(text: str | None, media_path: str | None, config: dict, uploader: YouTubeUploader, composer, twitter: TwitterUploader = None, telegram_publisher: TelegramPublisher = None):
+def _is_local_only(config: dict) -> bool:
+    """Песочница: только файл в outputs/, без YouTube и без публикации в Telegram."""
+    v = str(config.get("GENERAL", {}).get("local_only", "false")).strip().lower()
+    if v in ("true", "1", "yes", "on"):
+        return True
+    return os.environ.get("LOCAL_ONLY", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+async def process_message(
+    text: str | None,
+    media_path: str | None,
+    config: dict,
+    uploader: YouTubeUploader | None,
+    composer,
+    twitter: TwitterUploader = None,
+    telegram_publisher: TelegramPublisher = None,
+):
     if not text:
         logger.info("Message has no text. Using default text for video.")
         text = "Новини"  # Fallback текст
@@ -93,7 +109,12 @@ async def process_message(text: str | None, media_path: str | None, config: dict
     )
     logger.info("Video composed: %s", video_path)
 
-    # Step 4: Upload to YouTube or Telegram
+    # Step 4: Upload to YouTube or Telegram (пропуск в песочнице local_only)
+    if _is_local_only(config):
+        logger.info("🔶 Песочница (local_only): видео только локально — %s", video_path)
+        logger.info("All uploads complete (skipped)")
+        return
+
     upload_to_telegram = config.get('GENERAL', {}).get('upload_to_telegram', False)
 
     if upload_to_telegram and telegram_publisher and telegram_publisher.is_available():
@@ -111,6 +132,9 @@ async def process_message(text: str | None, media_path: str | None, config: dict
             logger.error("❌ Ошибка публикации в Telegram")
     else:
         # Публикация на YouTube
+        if uploader is None:
+            logger.error("❌ YouTube uploader недоступен")
+            return
         logger.info("📺 Публикуем на YouTube...")
         uploader.upload_video(
             video_file=str(video_path),
@@ -163,7 +187,15 @@ async def main():
 
     # Создаем генератор видео через фабрику (автоматически выбирает V1 или V2)
     composer = create_video_generator(config)
-    uploader = YouTubeUploader(config)
+    if _is_local_only(config):
+        uploader = None
+        out_dir = config["PATHS"].get("outputs_dir", "outputs")
+        logger.info(
+            "🔶 Режим local_only: без YouTube OAuth и без внешних загрузок; готовые ролики в %s/",
+            out_dir,
+        )
+    else:
+        uploader = YouTubeUploader(config)
 
     # Инициализируем Telegram Publisher
     try:
