@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User=dzianis
 WorkingDirectory=/home/dzianis/shorts-shot
-Environment=PATH=/home/dzianis/shorts-shot/.venv/bin
+Environment=PATH=/home/dzianis/shorts-shot/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/home/dzianis/shorts-shot/.venv/bin/python main_script.py
 Restart=always
 RestartSec=10

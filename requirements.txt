@@ -22,5 +22,8 @@ psutil>=5.9.0
 selenium>=4.15.0
 opencv-python>=4.8.0
 
+# X/Twitter status link → media (Telegram ingest)
+yt-dlp>=2024.0.0
+
 # Optional: For advanced features (if needed)
 # playwright>=1.40.0  # Only if using HTML rendering

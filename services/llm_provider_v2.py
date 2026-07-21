@@ -13,10 +13,24 @@ import google.generativeai as genai
 
 logger = logging.getLogger("llm_v2")
 
-SUPPORTED_GEMINI_MODELS = ('gemini-2.5-flash', 'gemini-2.5-flash-lite')
-DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
-# Модели, доступные для fallback (в порядке приоритета)
-FALLBACK_MODELS = list(SUPPORTED_GEMINI_MODELS)
+# Gemini 2.5* для новых ключей часто отдаёт 404 «no longer available to new users».
+# Актуальные замены: https://ai.google.dev/gemini-api/docs/deprecations
+SUPPORTED_GEMINI_MODELS = (
+    'gemini-3.1-flash-lite',
+    'gemini-3.5-flash',
+    'gemini-flash-lite-latest',
+    # legacy — ещё могут работать на старых проектах
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+)
+# Lite по умолчанию: как в Denis120→80 — быстрее для короткого JSON-пакета
+DEFAULT_GEMINI_MODEL = 'gemini-3.1-flash-lite'
+FALLBACK_MODELS = ['gemini-3.1-flash-lite', 'gemini-flash-lite-latest', 'gemini-3.5-flash']
+
+# Лимиты как у Denis: меньше thinking/болтовни, быстрее ответ
+SOURCE_TEXT_MAX_CHARS = 8000
+GENERATE_TIMEOUT_SEC = 45.0
+MAX_OUTPUT_TOKENS = 1024
 
 
 class GeminiProviderV2:
@@ -38,47 +52,32 @@ class GeminiProviderV2:
         self.original_model = normalized_model
         self.model = normalized_model
         self.fallback_models = [m for m in FALLBACK_MODELS if m != normalized_model]
-        # Системная инструкция: украинский копирайтер с живым тоном
+        # Короткий system: детали уже в news_package_en.prompt (без дубля)
         self.system_instruction = (
-            """
-Ти — досвідчений український журналіст та редактор новин для YouTube Shorts з 5+ роками досвіду.
-
-ТВІЙ СТИЛЬ:
-- Пиши просто і зрозуміло — так, щоб зрозумів навіть найменш підготовлений читач.
-- Легкий гумор допускається, але без перегинів — факти на першому місці.
-- Короткі фрази, активний стан, чітка логіка. Без канцеляриту, без кліше.
-- Динамічно, енергійно, з інтригою: Що сталось? Чому це важливо? Які наслідки?
-- Мова: лише українська (сучасна, природна). Уникай русизмів.
-
-ТВОЇ НАВИЧКИ:
-- Відмінне розуміння української та зовнішньополітичної повістки.
-- Фактчекінг: перевіряй факти, не вигадуй нічого понад джерело.
-- Стилістична редактура: логіка, ясність, точність.
-- Вмієш знаходити нові підходи до традиційних тем.
-- Перетворюєш великі новини на короткі, влучні пости.
-- НІКОЛИ не змінюй сімейний/стосунковий статус персонажів: використовуй формулювання джерела дослівно (наприклад, "цивільна дружина", "партнерка", "колишня дружина" — лише якщо це прямо сказано).
-
-АКТУАЛЬНІ ПОСАДИ (станом на 2025-2026):
-- Donald Trump / Дональд Трамп — President Trump / Президент Трамп (другий термін з січня 2025).
-  НІКОЛИ не пиши "екс-президент" чи "колишній президент" для Трампа.
-- JD Vance / Джей Ді Венс — Vice President / Віцепрезидент США.
-  НІКОЛИ не пиши "сенатор" для Венса.
-- Marco Rubio / Марко Рубіо — U.S. Secretary of State / Держсекретар США.
-  НІКОЛИ не пиши "сенатор" для Рубіо.
-- Pete Hegseth / Піт Хегсет — Secretary of War / Міністр війни США.
-- Volodymyr Zelenskyy / Володимир Зеленський — President of Ukraine / Президент України.
-
-Жодних емодзі/хештегів/посилань у заголовках, якщо явно не вимагається.
-            """
-        ).strip()
+            "Ти український редактор YouTube Shorts. Відповідай лише валідним JSON українською. "
+            "Факти тільки з джерела. Трамп = Президент (з 2025), не екс-президент."
+        )
+        self._generation_config = genai.GenerationConfig(
+            temperature=0.5,
+            max_output_tokens=MAX_OUTPUT_TOKENS,
+            response_mime_type='application/json',
+        )
+        self._model_instance = None
         
         if not self.api_key:
             raise RuntimeError("GEMINI_API_KEY is not set")
         
-        # Настраиваем API ключ для google-generativeai
         genai.configure(api_key=self.api_key)
+        self._model_instance = self._build_model()
         
         logger.info(f"🤖 GeminiProviderV2 инициализирован: {self.model}")
+
+    def _build_model(self):
+        return genai.GenerativeModel(
+            self.model,
+            system_instruction=self.system_instruction,
+            generation_config=self._generation_config,
+        )
     
     def _is_quota_error(self, error: Exception) -> Tuple[bool, Optional[float]]:
         """Проверяет, является ли ошибка ошибкой квоты (429) и извлекает retry_delay"""
@@ -118,6 +117,7 @@ class GeminiProviderV2:
             logger.warning(f"⚠️ Переключаемся на fallback модель: {fallback}")
             old_model = self.model
             self.model = fallback
+            self._model_instance = self._build_model()
             return old_model
         return None
     
@@ -128,23 +128,27 @@ class GeminiProviderV2:
         try:
             logger.info(f"📡 Отправляем запрос к Gemini API (модель: {self.model})...")
             
-            # Создаем модель и генерируем контент (с системной инструкцией)
-            model_instance = genai.GenerativeModel(
-                self.model,
-                system_instruction=self.system_instruction
+            if self._model_instance is None:
+                self._model_instance = self._build_model()
+
+            response = await asyncio.wait_for(
+                asyncio.to_thread(self._model_instance.generate_content, prompt),
+                timeout=GENERATE_TIMEOUT_SEC,
             )
             
-            # Выполняем генерацию в отдельном потоке
-            response = await asyncio.to_thread(
-                model_instance.generate_content,
-                prompt
-            )
-            
-            # Получаем текст из ответа
             result = response.text if hasattr(response, 'text') else str(response)
             logger.info("✅ Получен ответ от Gemini API")
             return result.strip()
             
+        except asyncio.TimeoutError:
+            logger.error(f"❌ Таймаут Gemini ({GENERATE_TIMEOUT_SEC:.0f}s) для {self.model}")
+            if retry_count == 0 and self.fallback_models:
+                old_model = self._try_fallback_model()
+                if old_model:
+                    logger.warning("🔄 Пробуем fallback модель после таймаута")
+                    return await self._generate(prompt, retry_count=0)
+            raise RuntimeError(f"Gemini timeout after {GENERATE_TIMEOUT_SEC:.0f}s ({self.model})")
+
         except Exception as e:
             error_str = str(e)
 
@@ -227,8 +231,18 @@ class GeminiProviderV2:
             logger.error(f"Не удалось прочитать шаблон промпта: {path} ({e})")
             raise
 
+        # Как в Denis120→80: длинные форварды режем — меньше TTFT
+        clipped = (source_text or '').strip()
+        if len(clipped) > SOURCE_TEXT_MAX_CHARS:
+            logger.info(
+                "✂️ Обрезаем source_text: %s → %s символов",
+                len(clipped),
+                SOURCE_TEXT_MAX_CHARS,
+            )
+            clipped = clipped[:SOURCE_TEXT_MAX_CHARS]
+
         mapping = {
-            '{{SOURCE_TEXT}}': source_text,
+            '{{SOURCE_TEXT}}': clipped,
             '{{SOURCE_NAME}}': source_name,
             '{{SOURCE_URL}}': source_url,
         }

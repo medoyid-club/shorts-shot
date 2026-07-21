@@ -270,19 +270,64 @@ class VideoComposerV2:
         summary = video_data.get('summary', 'Краткое содержание')
         source_text = video_data.get('source_text', 'Источник')
         
-        # Обработка медиа
+        # Обработка медиа (один файл или альбом → карусель)
         media_path = video_data.get('media_path')
-        media_uri = self._preprocess_media(media_path)
-        
+        if isinstance(media_path, (list, tuple)):
+            media_paths = [str(p) for p in media_path if p]
+        elif media_path:
+            media_paths = [str(media_path)]
+        else:
+            media_paths = []
+
+        image_exts = {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
+        video_exts = {'.mp4', '.webm', '.mov'}
+        image_paths = [p for p in media_paths if Path(p).suffix.lower() in image_exts]
+        video_paths = [p for p in media_paths if Path(p).suffix.lower() in video_exts]
+
         news_image = ''
         news_video = ''
-        if media_uri:
-            # Определяем тип по расширению оригинального файла
-            ext = Path(media_path).suffix.lower()
-            if ext in ['.mp4', '.webm', '.mov']:
-                news_video = media_uri
-            elif ext in ['.jpg', '.jpeg', '.png', '.webp']:
-                news_image = media_uri
+        carousel_uris: list = []
+        media_focus_css = '50% 32%'
+        media_fit = 'cover'
+
+        # Карусель: 2+ изображений из альбома
+        if len(image_paths) >= 2:
+            for p in image_paths[:8]:
+                uri = self._preprocess_media(p)
+                if uri:
+                    carousel_uris.append(uri)
+            if carousel_uris:
+                news_image = carousel_uris[0]
+                try:
+                    from services.smart_crop import compute_media_layout
+                    layout = compute_media_layout(image_paths[0])
+                    media_focus_css = layout.focus_css
+                    media_fit = layout.fit if layout.fit in ('cover', 'contain') else 'cover'
+                except Exception as e:
+                    logger.warning("⚠️ smart_crop пропущен: %s", e)
+                logger.info("🎠 Карусель: %s слайдов", len(carousel_uris))
+        elif image_paths:
+            media_uri = self._preprocess_media(image_paths[0])
+            news_image = media_uri or ''
+            if media_uri:
+                try:
+                    from services.smart_crop import compute_media_layout
+                    layout = compute_media_layout(image_paths[0])
+                    media_focus_css = layout.focus_css
+                    media_fit = layout.fit if layout.fit in ('cover', 'contain') else 'cover'
+                except Exception as e:
+                    logger.warning("⚠️ smart_crop пропущен: %s", e)
+        elif video_paths:
+            media_uri = self._preprocess_media(video_paths[0])
+            news_video = media_uri or ''
+            if media_uri:
+                try:
+                    from services.smart_crop import compute_media_layout
+                    layout = compute_media_layout(video_paths[0])
+                    media_focus_css = layout.focus_css
+                    media_fit = layout.fit if layout.fit in ('cover', 'contain') else 'cover'
+                except Exception as e:
+                    logger.warning("⚠️ smart_crop пропущен: %s", e)
 
         # QR и водяной знак источника отключены в шаблоне v3_glass; плейсхолдеры оставлены пустыми для совместимости
         qr_uri = ''
@@ -298,8 +343,11 @@ class VideoComposerV2:
             '{{NEWS_BRIEF_JSON}}': _brief_json_for_html(summary),
             '{{NEWS_IMAGE}}': news_image,
             '{{NEWS_VIDEO}}': news_video,
+            '{{CAROUSEL_IMAGES_JSON}}': json.dumps(carousel_uris, ensure_ascii=False).replace("<", "\\u003c"),
             '{{SOURCE_NAME}}': source_text,
             '{{QR_CODE_PATH}}': qr_uri,
+            '{{MEDIA_FOCUS}}': media_focus_css,
+            '{{MEDIA_FIT}}': media_fit,
         }
 
         for placeholder, value in replacements.items():
@@ -417,6 +465,13 @@ function finalize(success) {
         });
     } catch (err) {
         console.error('Spinner phase sync', err);
+    }
+    try {
+        if (typeof window.__syncCarousel === 'function') {
+            window.__syncCarousel(clampedTime);
+        }
+    } catch (err) {
+        console.error('Carousel sync', err);
     }
     callback(success);
 }
@@ -598,7 +653,7 @@ try {
         music_files = list(music_dir.glob('*.mp3'))
         return str(np.random.choice(music_files)) if music_files else None
 
-    async def compose(self, short_text: Union[str, dict], media_path: str, output_path: str, source_text: str) -> str:
+    async def compose(self, short_text: Union[str, dict], media_path: Union[str, list, None], output_path: str, source_text: str) -> str:
         logger.info("🎬 Запуск генерации видео V2 (HTML+Selenium)...")
         
         # Инициализируем браузер только когда он действительно нужен
@@ -630,8 +685,17 @@ try {
             wait = WebDriverWait(self.driver, 15)  # Ждем до 15 секунд
 
             media_loaded_successfully = False
-            if video_data.get('media_path'):
-                ext = Path(video_data['media_path']).suffix.lower()
+            mp = video_data.get('media_path')
+            if isinstance(mp, (list, tuple)) and len(mp) >= 2:
+                try:
+                    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '#mediaCarousel .carousel-slide')))
+                    logger.info("✅ Карусель медиа готова")
+                    media_loaded_successfully = True
+                except Exception:
+                    logger.warning("⚠️ Карусель не появилась за 15 секунд.")
+            elif mp:
+                first = mp[0] if isinstance(mp, (list, tuple)) else mp
+                ext = Path(str(first)).suffix.lower()
                 element_id = None
                 if ext in ['.mp4', '.webm', '.mov']:
                     element_id = "mediaVideo"

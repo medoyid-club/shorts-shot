@@ -467,6 +467,10 @@ class VideoComposer:
         return ImageSequenceClip(frames, fps=fps)
 
     async def compose(self, short_text: str, media_path: str | None, output_path: str, source_text: str) -> str:
+        # Альбом: V1 берёт только первый файл
+        if isinstance(media_path, (list, tuple)):
+            media_path = media_path[0] if media_path else None
+
         header_h = int(self.height * self.header_ratio)
         middle_h = int(self.height * self.middle_ratio)
         footer_h = self.height - header_h - middle_h

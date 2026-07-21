@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<!-- Full-bleed Short: media fullscreen + solid dark / glass chyron (mid-frame). Sandbox V4. -->
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>News Short — Fullscreen V4</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Arsenal:wght@700&family=Noto+Sans:wght@500;600;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 1080px;
+            height: 1920px;
+            overflow: hidden;
+            background: #0a0a0c;
+            font-family: 'Noto Sans', system-ui, sans-serif;
+            color: #f4f4f5;
+            position: relative;
+        }
+
+        /* --- Full-bleed media --- */
+        .media-layer {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            overflow: hidden;
+            background: #0a0a0c;
+        }
+
+        /* Размытый фон для режима contain (альбомные talking-head) */
+        .media-blur {
+            display: none;
+            position: absolute;
+            inset: -8%;
+            z-index: 0;
+            filter: blur(28px) saturate(1.05) brightness(0.55);
+            transform: scale(1.12);
+            pointer-events: none;
+            /* без анимаций — только статичный фон */
+            will-change: auto;
+        }
+
+        .media-blur video,
+        .media-blur img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center center;
+            display: block;
+        }
+
+        .media-slot {
+            position: absolute;
+            width: 112%;
+            height: 112%;
+            left: -6%;
+            top: -6%;
+            z-index: 1;
+            transform-origin: var(--media-focus, 50% 32%);
+            will-change: transform;
+        }
+
+        .media-slot video,
+        .media-slot img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: var(--media-focus, 50% 32%);
+            display: block;
+        }
+
+        /*
+         * contain (альбом / talking-head): медиа только в верхней сцене
+         * над шитроном (~0–52%), cover внутри сцены — без «пустого» blur сверху.
+         * Размытый фон — узкая подложка под сцену, низ кадра остаётся тёмным.
+         */
+        .media-layer[data-fit="contain"] .media-blur {
+            display: block;
+            inset: auto;
+            top: -4%;
+            left: -10%;
+            right: -10%;
+            height: 58%;
+            filter: blur(36px) saturate(1.08) brightness(0.42);
+            transform: scale(1.08);
+        }
+
+        .media-layer[data-fit="contain"] .media-slot {
+            width: 100%;
+            height: 52%;
+            left: 0;
+            top: 0;
+            transform-origin: center 42%;
+        }
+
+        .media-layer[data-fit="contain"] .media-slot video,
+        .media-layer[data-fit="contain"] .media-slot img {
+            /* cover в верхней зоне: кадр заполняет ширину, лицо не «висит» в пустоте */
+            object-fit: cover;
+            object-position: var(--media-focus, center 30%);
+        }
+
+        /* Мягкий переход сцена → шитрон (без полосы blur на весь кадр) */
+        .media-layer[data-fit="contain"]::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 42%;
+            height: 18%;
+            z-index: 2;
+            pointer-events: none;
+            background: linear-gradient(
+                180deg,
+                rgba(10, 10, 12, 0) 0%,
+                rgba(10, 10, 12, 0.55) 55%,
+                rgba(10, 10, 12, 0.92) 100%
+            );
+        }
+
+        .media-placeholder {
+            display: none;
+            width: 100%;
+            height: 100%;
+            background: #1a1a22;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.45);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .media-placeholder.is-visible {
+            display: flex;
+        }
+
+        /* Карусель альбома Telegram */
+        .carousel {
+            display: none;
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+        }
+
+        .carousel.is-active {
+            display: block;
+        }
+
+        .carousel-slide {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .carousel-slide.is-active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .carousel-slide img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: var(--media-focus, 50% 32%);
+            display: block;
+        }
+
+        .media-layer[data-fit="contain"] .carousel-slide img {
+            object-fit: cover;
+            object-position: var(--media-focus, center 30%);
+        }
+
+        .carousel-dots {
+            display: none;
+            position: absolute;
+            left: 50%;
+            bottom: 28%;
+            transform: translateX(-50%);
+            z-index: 3;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .carousel.is-active + .media-scrim ~ .chyron {
+            /* keep layout */
+        }
+
+        .media-layer[data-carousel="1"] .carousel-dots {
+            display: flex;
+        }
+
+        .carousel-dots span {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.35);
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+        }
+
+        .carousel-dots span.is-active {
+            background: #e8c547;
+            transform: scale(1.15);
+        }
+
+        /* Scrim сильнее в зоне текста (середина–низ) */
+        .media-scrim {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            pointer-events: none;
+            background: linear-gradient(
+                180deg,
+                rgba(0, 0, 0, 0.12) 0%,
+                rgba(0, 0, 0, 0.08) 28%,
+                rgba(0, 0, 0, 0.45) 48%,
+                rgba(0, 0, 0, 0.62) 72%,
+                rgba(0, 0, 0, 0.55) 100%
+            );
+        }
+
+        /* contain: верх светлее (медиа читается), низ плотнее под шитрон */
+        .media-layer[data-fit="contain"] ~ .media-scrim {
+            background: linear-gradient(
+                180deg,
+                rgba(0, 0, 0, 0.06) 0%,
+                rgba(0, 0, 0, 0.1) 35%,
+                rgba(0, 0, 0, 0.55) 52%,
+                rgba(0, 0, 0, 0.78) 72%,
+                rgba(0, 0, 0, 0.7) 100%
+            );
+        }
+
+        /*
+         * Chyron ближе к середине кадра.
+         * Низ: запас под UI Shorts (~220px), чтобы текст не обрезался.
+         */
+        .chyron {
+            position: absolute;
+            left: 44px;
+            right: 44px;
+            top: 46%;
+            bottom: 220px;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            gap: 22px;
+            padding: 40px 44px 44px;
+            border-radius: 22px;
+            background: rgba(10, 10, 14, 0.86);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.09);
+            box-shadow:
+                0 28px 56px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.06);
+            overflow: hidden;
+            /* без scale/y на всём блоке — иначе низ уезжает за кадр */
+        }
+
+        .chyron-accent {
+            position: absolute;
+            left: 0;
+            top: 32px;
+            bottom: 32px;
+            width: 4px;
+            border-radius: 0 3px 3px 0;
+            background: #e8c547;
+            opacity: 0.95;
+        }
+
+        .chyron-live {
+            position: absolute;
+            top: 32px;
+            right: 40px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #e8c547;
+            box-shadow: 0 0 0 3px rgba(232, 197, 71, 0.28);
+        }
+
+        .title-block {
+            font-family: 'Arsenal', 'Noto Sans', sans-serif;
+            font-weight: 700;
+            font-size: 60px;
+            line-height: 1.28;
+            letter-spacing: -0.01em;
+            color: #fafafa;
+            padding-left: 20px;
+            padding-right: 36px;
+            flex: 0 0 auto;
+            max-height: 240px;
+            overflow: hidden;
+            text-wrap: balance;
+            will-change: transform;
+        }
+
+        /*
+         * Красный маркер на заголовке — «дедовский» акцент внимания.
+         * Цитаты в брифе остаются жёлтыми (иерархия: красный = title, жёлтый = quote).
+         */
+        .title-block .title-mark {
+            display: inline;
+            color: #ffffff;
+            font: inherit;
+            line-height: inherit;
+            padding: 0.05em 0.14em;
+            margin: 0 -0.04em;
+            border-radius: 3px;
+            box-decoration-break: clone;
+            -webkit-box-decoration-break: clone;
+            background: linear-gradient(
+                180deg,
+                transparent 0.1em,
+                #d42222 0.1em,
+                #e02a2a 0.55em,
+                #c41e1e 1.05em,
+                transparent 1.05em
+            );
+            box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+            text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+        }
+
+        .title-brief-rule {
+            height: 1px;
+            margin: 0 20px;
+            flex-shrink: 0;
+            background: linear-gradient(
+                90deg,
+                rgba(212, 34, 34, 0.65),
+                rgba(255, 255, 255, 0.12) 40%,
+                rgba(255, 255, 255, 0)
+            );
+            border: none;
+        }
+
+        .brief-holder {
+            padding-left: 20px;
+            padding-right: 16px;
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: hidden;
+            color: rgba(250, 250, 252, 0.94);
+            font-family: 'Noto Sans', system-ui, sans-serif;
+            will-change: transform;
+        }
+
+        .brief-holder .text-content {
+            font-weight: 650;
+            line-height: 1.38;
+            letter-spacing: 0.01em;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            text-rendering: optimizeLegibility;
+            -webkit-font-smoothing: subpixel-antialiased;
+        }
+
+        .brief-holder .brief-mark {
+            font-weight: 700;
+            color: #0c0c10;
+            background: linear-gradient(
+                180deg,
+                transparent 0.42em,
+                rgba(232, 197, 71, 0.96) 0.42em,
+                rgba(232, 197, 71, 0.96) 1.08em,
+                transparent 1.08em
+            );
+            border-radius: 2px;
+            box-decoration-break: clone;
+            -webkit-box-decoration-break: clone;
+            padding: 0 0.04em;
+        }
+
+        .spinner,
+        .loader {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <script type="application/json" id="news-brief-json">{{NEWS_BRIEF_JSON}}</script>
+    <script type="application/json" id="carousel-images-json">{{CAROUSEL_IMAGES_JSON}}</script>
+
+    <div class="media-layer" id="mediaLayer" data-fit="{{MEDIA_FIT}}">
+        <div class="media-blur" id="mediaBlur" aria-hidden="true">
+            <!-- Без autoplay/loop: статичный кадр, иначе дёргается при покадровом захвате -->
+            <video id="blurVideo" muted playsinline preload="auto" style="display: none;">
+                <source src="{{NEWS_VIDEO}}" type="video/mp4">
+            </video>
+            <img id="blurImage" src="{{NEWS_IMAGE}}" alt="" style="display: none;">
+        </div>
+        <div class="media-slot" id="mediaSlot" style="--media-focus: {{MEDIA_FOCUS}};">
+            <video id="mediaVideo" autoplay loop muted playsinline style="display: none;">
+                <source src="{{NEWS_VIDEO}}" type="video/mp4">
+            </video>
+            <img id="mediaImage" src="{{NEWS_IMAGE}}" alt="" style="display: none;">
+            <div class="carousel" id="mediaCarousel" aria-hidden="true"></div>
+            <div class="media-placeholder" id="mediaPlaceholder" aria-hidden="true">Shorts</div>
+        </div>
+        <div class="carousel-dots" id="carouselDots" aria-hidden="true"></div>
+    </div>
+    <div class="media-scrim" aria-hidden="true"></div>
+
+    <section class="chyron" id="chyron" aria-label="Новина">
+        <span class="chyron-accent" aria-hidden="true"></span>
+        <span class="chyron-live" id="liveDot" aria-hidden="true"></span>
+        <h1 class="title-block" id="titleBlock"><span class="title-mark" id="titleMark">{{NEWS_TITLE}}</span></h1>
+        <hr class="title-brief-rule" aria-hidden="true">
+        <div class="brief-holder" id="briefHolder"></div>
+    </section>
+
+    <div style="display:none" aria-hidden="true">{{SOURCE_NAME}}{{QR_CODE_PATH}}</div>
+
+    <script>
+        const GSAP_LOADED = typeof gsap !== 'undefined';
+
+        function setupCinematicMotion(mediaEl) {
+            const slot = document.getElementById('mediaSlot');
+            const title = document.getElementById('titleBlock');
+            const brief = document.getElementById('briefHolder');
+            const liveDot = document.getElementById('liveDot');
+            if (!slot) return;
+
+            if (window.__cinematicTimeline) {
+                try { window.__cinematicTimeline.kill(); } catch (err) {}
+                window.__cinematicTimeline = null;
+            }
+
+            if (!GSAP_LOADED) return;
+
+            /* Origin из smart_crop (--media-fit / --media-focus) */
+            const layer = document.getElementById('mediaLayer');
+            const fit = (layer && layer.getAttribute('data-fit')) || 'cover';
+            const focus = getComputedStyle(slot).getPropertyValue('--media-focus').trim() || '50% 32%';
+            slot.style.transformOrigin = fit === 'contain' ? 'center 42%' : focus;
+            gsap.set(slot, { x: 0, y: 0, scale: 1, transformOrigin: slot.style.transformOrigin });
+            if (title) gsap.set(title, { y: 0 });
+            if (brief) gsap.set(brief, { y: 0 });
+            if (liveDot) gsap.set(liveDot, { opacity: 0.7, scale: 1 });
+
+            const tl = gsap.timeline({ repeat: -1, defaults: { ease: 'sine.inOut' } });
+
+            /* contain: лёгкий drift в верхней сцене; cover: Ken Burns по всему кадру */
+            if (fit === 'contain') {
+                tl.to(slot, { duration: 3, scale: 1.03, y: -6 }, 0)
+                  .to(slot, { duration: 3, scale: 1, y: 0 }, 3);
+            } else {
+                tl.to(slot, { duration: 3, scale: 1.024, x: -4, y: -5 }, 0)
+                  .to(slot, { duration: 3, scale: 1, x: 0, y: 0 }, 3);
+            }
+
+            /*
+             * Текст: лёгкий противофазный drift (как «дыхание»), без scale панели.
+             * Панель зафиксирована — низ не вылезает за кадр.
+             */
+            if (title) {
+                tl.to(title, { duration: 3, y: -3 }, 0)
+                  .to(title, { duration: 3, y: 0 }, 3);
+            }
+            if (brief) {
+                tl.to(brief, { duration: 3, y: 2 }, 0)
+                  .to(brief, { duration: 3, y: 0 }, 3);
+            }
+            if (liveDot) {
+                tl.to(liveDot, { duration: 1.5, opacity: 1, scale: 1.15 }, 0)
+                  .to(liveDot, { duration: 1.5, opacity: 0.55, scale: 1 }, 1.5)
+                  .to(liveDot, { duration: 1.5, opacity: 1, scale: 1.12 }, 3)
+                  .to(liveDot, { duration: 1.5, opacity: 0.65, scale: 1 }, 4.5);
+            }
+
+            window.__cinematicTimeline = tl;
+            window.__cinematicDuration = 6;
+            window.__cinematicTarget = mediaEl || slot;
+            tl.play(0);
+        }
+
+        function fillBriefWithQuoteMarks(block, text) {
+            const re = /«[^»]*»|„[^“]*“/g;
+            let last = 0;
+            let m;
+            let found = false;
+            while ((m = re.exec(text)) !== null) {
+                found = true;
+                if (m.index > last) {
+                    block.appendChild(document.createTextNode(text.slice(last, m.index)));
+                }
+                const span = document.createElement('span');
+                span.className = 'brief-mark';
+                span.textContent = m[0];
+                block.appendChild(span);
+                last = re.lastIndex;
+            }
+            if (last < text.length) {
+                block.appendChild(document.createTextNode(text.slice(last)));
+            }
+            if (!found) {
+                block.textContent = text;
+            }
+        }
+
+        function autoFitText(container, text, minFontSize, maxFontSize) {
+            const measureDiv = document.createElement('div');
+            measureDiv.style.cssText = 'position:absolute;visibility:hidden;white-space:pre-wrap;word-wrap:break-word;';
+            measureDiv.style.fontFamily = window.getComputedStyle(container).fontFamily;
+            measureDiv.style.fontWeight = '650';
+            measureDiv.style.lineHeight = '1.38';
+            measureDiv.style.letterSpacing = '0.01em';
+            measureDiv.textContent = text;
+            document.body.appendChild(measureDiv);
+
+            const containerStyle = window.getComputedStyle(container);
+            const paddingX = parseFloat(containerStyle.paddingLeft) + parseFloat(containerStyle.paddingRight);
+            const paddingY = parseFloat(containerStyle.paddingTop) + parseFloat(containerStyle.paddingBottom);
+            let maxWidth = container.clientWidth - paddingX;
+            let maxHeight = container.clientHeight - paddingY;
+            if (maxWidth < 80) {
+                maxWidth = Math.max(320, 1080 - 88 - 88 - 40 - paddingX);
+            }
+            if (maxHeight < 80) {
+                maxHeight = 380;
+            }
+
+            let low = minFontSize;
+            let high = maxFontSize;
+            let bestSize = minFontSize;
+
+            while (low <= high) {
+                const mid = Math.floor((low + high) / 2);
+                measureDiv.style.fontSize = mid + 'px';
+                measureDiv.style.width = maxWidth + 'px';
+                void measureDiv.offsetHeight;
+                if (measureDiv.offsetWidth <= maxWidth && measureDiv.offsetHeight <= maxHeight * 0.98) {
+                    bestSize = mid;
+                    low = mid + 1;
+                } else {
+                    high = mid - 1;
+                }
+            }
+
+            document.body.removeChild(measureDiv);
+
+            const textSpan = document.createElement('div');
+            textSpan.className = 'text-content';
+            textSpan.style.fontSize = bestSize + 'px';
+            fillBriefWithQuoteMarks(textSpan, text);
+            container.appendChild(textSpan);
+            return bestSize;
+        }
+
+        function fitTitle() {
+            const el = document.getElementById('titleBlock');
+            const mark = document.getElementById('titleMark') || el;
+            if (!el || !mark) return;
+            const text = (mark.textContent || '').trim();
+            if (!text) return;
+
+            let size = 62;
+            const min = 44;
+            el.style.fontSize = size + 'px';
+            while (size > min && el.scrollHeight > el.clientHeight + 2) {
+                size -= 2;
+                el.style.fontSize = size + 'px';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const mediaVideo = document.getElementById('mediaVideo');
+            const mediaImage = document.getElementById('mediaImage');
+            const placeholder = document.getElementById('mediaPlaceholder');
+            const carousel = document.getElementById('mediaCarousel');
+            const carouselDots = document.getElementById('carouselDots');
+            const mediaLayer = document.getElementById('mediaLayer');
+            const videoSource = mediaVideo.getElementsByTagName('source')[0];
+            const videoSrc = videoSource ? videoSource.getAttribute('src') : '';
+            const imageSrc = mediaImage.getAttribute('src');
+
+            let carouselUris = [];
+            try {
+                const cel = document.getElementById('carousel-images-json');
+                if (cel && cel.textContent && cel.textContent.trim() && cel.textContent.trim() !== '[]') {
+                    carouselUris = JSON.parse(cel.textContent);
+                }
+            } catch (e) {
+                console.warn('carousel-images-json parse failed', e);
+            }
+            if (!Array.isArray(carouselUris)) carouselUris = [];
+
+            let motionTarget = null;
+
+            function setupCarousel(uris) {
+                if (!carousel || uris.length < 2) return false;
+                carousel.innerHTML = '';
+                if (carouselDots) carouselDots.innerHTML = '';
+                uris.forEach(function (uri, i) {
+                    const slide = document.createElement('div');
+                    slide.className = 'carousel-slide' + (i === 0 ? ' is-active' : '');
+                    const img = document.createElement('img');
+                    img.src = uri;
+                    img.alt = '';
+                    slide.appendChild(img);
+                    carousel.appendChild(slide);
+                    if (carouselDots) {
+                        const dot = document.createElement('span');
+                        if (i === 0) dot.className = 'is-active';
+                        carouselDots.appendChild(dot);
+                    }
+                });
+                carousel.classList.add('is-active');
+                if (mediaLayer) mediaLayer.setAttribute('data-carousel', '1');
+                mediaImage.style.display = 'none';
+                mediaVideo.style.display = 'none';
+                placeholder.classList.remove('is-visible');
+
+                // Blur = первое фото (статика)
+                const blurImage = document.getElementById('blurImage');
+                if (blurImage && uris[0]) {
+                    blurImage.src = uris[0];
+                    blurImage.style.display = 'block';
+                }
+
+                window.__syncCarousel = function (t) {
+                    const slides = carousel.querySelectorAll('.carousel-slide');
+                    const dots = carouselDots ? carouselDots.querySelectorAll('span') : [];
+                    const n = slides.length;
+                    if (!n) return;
+                    const total = (window.__cinematicDuration && window.__cinematicDuration > 0)
+                        ? window.__cinematicDuration
+                        : 6;
+                    const slideSec = total / n;
+                    let idx = Math.floor(Math.max(0, t) / slideSec);
+                    if (idx >= n) idx = n - 1;
+                    if (idx < 0) idx = 0;
+                    slides.forEach(function (el, i) {
+                        el.classList.toggle('is-active', i === idx);
+                    });
+                    dots.forEach(function (el, i) {
+                        el.classList.toggle('is-active', i === idx);
+                    });
+                };
+                window.__syncCarousel(0);
+                return true;
+            }
+
+            if (setupCarousel(carouselUris)) {
+                motionTarget = carousel;
+                setupCinematicMotion(carousel);
+            } else if (videoSrc) {
+                mediaVideo.style.display = 'block';
+                const blurVideo = document.getElementById('blurVideo');
+                if (blurVideo) {
+                    blurVideo.style.display = 'block';
+                    const freezeBlur = function() {
+                        try {
+                            blurVideo.pause();
+                            const d = blurVideo.duration;
+                            const t = (isFinite(d) && d > 0.6) ? Math.min(0.5, d * 0.25) : 0.05;
+                            blurVideo.currentTime = t;
+                        } catch (err) {}
+                    };
+                    blurVideo.addEventListener('loadeddata', freezeBlur);
+                    blurVideo.addEventListener('play', function() { blurVideo.pause(); });
+                    if (blurVideo.readyState >= 2) freezeBlur();
+                }
+                placeholder.classList.remove('is-visible');
+                motionTarget = mediaVideo;
+                mediaVideo.addEventListener('loadeddata', function() {
+                    setupCinematicMotion(mediaVideo);
+                });
+                if (mediaVideo.readyState >= 2) setupCinematicMotion(mediaVideo);
+            } else if (imageSrc) {
+                mediaImage.style.display = 'block';
+                const blurImage = document.getElementById('blurImage');
+                if (blurImage) blurImage.style.display = 'block';
+                placeholder.classList.remove('is-visible');
+                motionTarget = mediaImage;
+                mediaImage.addEventListener('load', function() {
+                    setupCinematicMotion(mediaImage);
+                });
+                if (mediaImage.complete) setupCinematicMotion(mediaImage);
+            } else {
+                placeholder.classList.add('is-visible');
+                setupCinematicMotion(null);
+            }
+
+            let fullText = '';
+            try {
+                const jsonEl = document.getElementById('news-brief-json');
+                if (jsonEl && jsonEl.textContent) {
+                    fullText = JSON.parse(jsonEl.textContent);
+                }
+            } catch (e) {
+                console.warn('news-brief-json parse failed', e);
+            }
+            if (typeof fullText !== 'string') fullText = '';
+            fullText = fullText.trim();
+
+            const briefHolder = document.getElementById('briefHolder');
+
+            function runFit() {
+                fitTitle();
+                if (fullText && briefHolder) {
+                    briefHolder.innerHTML = '';
+                    /* Крупнее бриф: деды должны читать с телефона */
+                    autoFitText(briefHolder, fullText, 36, 56);
+                }
+                if (!window.__cinematicTimeline) {
+                    setupCinematicMotion(motionTarget);
+                }
+            }
+
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    runFit();
+                    setTimeout(runFit, 50);
+                });
+            });
+        });
+    </script>
+</body>
+</html>
