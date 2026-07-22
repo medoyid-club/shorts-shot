@@ -101,7 +101,7 @@ async def _download_one(client, msg, download_path: Path) -> Optional[str]:
 
 
 async def _download_album(client, messages, download_path: Path) -> MediaPath:
-    """Download album items (prefer images); return list or single path."""
+    """Download album items (photos + videos); return list or single path."""
     paths: List[str] = []
     for msg in sorted(messages, key=lambda m: m.id)[:MAX_ALBUM_ITEMS]:
         p = await _download_one(client, msg, download_path)

@@ -280,50 +280,58 @@ class VideoComposerV2:
             media_paths = []
 
         image_exts = {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
-        video_exts = {'.mp4', '.webm', '.mov'}
-        image_paths = [p for p in media_paths if Path(p).suffix.lower() in image_exts]
-        video_paths = [p for p in media_paths if Path(p).suffix.lower() in video_exts]
+        video_exts = {'.mp4', '.webm', '.mov', '.mkv'}
+
+        def _media_kind(path: str) -> Optional[str]:
+            ext = Path(path).suffix.lower()
+            if ext in image_exts:
+                return 'image'
+            if ext in video_exts:
+                return 'video'
+            return None
 
         news_image = ''
         news_video = ''
-        carousel_uris: list = []
+        carousel_items: list = []
         media_focus_css = '50% 32%'
         media_fit = 'cover'
 
-        # Карусель: 2+ изображений из альбома
-        if len(image_paths) >= 2:
-            for p in image_paths[:8]:
+        # Карусель: 2+ любых медиа из поста/альбома (порядок как в Telegram)
+        known_paths = [p for p in media_paths if _media_kind(p)]
+        if len(known_paths) >= 2:
+            for p in known_paths[:8]:
+                kind = _media_kind(p)
                 uri = self._preprocess_media(p)
-                if uri:
-                    carousel_uris.append(uri)
-            if carousel_uris:
-                news_image = carousel_uris[0]
+                if uri and kind:
+                    carousel_items.append({'src': uri, 'type': kind})
+            if carousel_items:
+                first = carousel_items[0]
+                if first['type'] == 'image':
+                    news_image = first['src']
+                else:
+                    news_video = first['src']
                 try:
                     from services.smart_crop import compute_media_layout
-                    layout = compute_media_layout(image_paths[0])
+                    layout = compute_media_layout(known_paths[0])
                     media_focus_css = layout.focus_css
                     media_fit = layout.fit if layout.fit in ('cover', 'contain') else 'cover'
                 except Exception as e:
                     logger.warning("⚠️ smart_crop пропущен: %s", e)
-                logger.info("🎠 Карусель: %s слайдов", len(carousel_uris))
-        elif image_paths:
-            media_uri = self._preprocess_media(image_paths[0])
-            news_image = media_uri or ''
+                n_img = sum(1 for x in carousel_items if x['type'] == 'image')
+                n_vid = sum(1 for x in carousel_items if x['type'] == 'video')
+                logger.info("🎠 Карусель: %s слайдов (%s фото, %s видео)", len(carousel_items), n_img, n_vid)
+        elif known_paths:
+            p0 = known_paths[0]
+            kind = _media_kind(p0)
+            media_uri = self._preprocess_media(p0)
+            if kind == 'image':
+                news_image = media_uri or ''
+            else:
+                news_video = media_uri or ''
             if media_uri:
                 try:
                     from services.smart_crop import compute_media_layout
-                    layout = compute_media_layout(image_paths[0])
-                    media_focus_css = layout.focus_css
-                    media_fit = layout.fit if layout.fit in ('cover', 'contain') else 'cover'
-                except Exception as e:
-                    logger.warning("⚠️ smart_crop пропущен: %s", e)
-        elif video_paths:
-            media_uri = self._preprocess_media(video_paths[0])
-            news_video = media_uri or ''
-            if media_uri:
-                try:
-                    from services.smart_crop import compute_media_layout
-                    layout = compute_media_layout(video_paths[0])
+                    layout = compute_media_layout(p0)
                     media_focus_css = layout.focus_css
                     media_fit = layout.fit if layout.fit in ('cover', 'contain') else 'cover'
                 except Exception as e:
@@ -343,7 +351,7 @@ class VideoComposerV2:
             '{{NEWS_BRIEF_JSON}}': _brief_json_for_html(summary),
             '{{NEWS_IMAGE}}': news_image,
             '{{NEWS_VIDEO}}': news_video,
-            '{{CAROUSEL_IMAGES_JSON}}': json.dumps(carousel_uris, ensure_ascii=False).replace("<", "\\u003c"),
+            '{{CAROUSEL_IMAGES_JSON}}': json.dumps(carousel_items, ensure_ascii=False).replace("<", "\\u003c"),
             '{{SOURCE_NAME}}': source_text,
             '{{QR_CODE_PATH}}': qr_uri,
             '{{MEDIA_FOCUS}}': media_focus_css,
@@ -372,10 +380,10 @@ body.v2-capture .loader .dot {
             html_content = html_content.replace("</head>", _capture_spinner_css + "\n</head>", 1)
         if self._sandbox_theme_debug is not None:
             theme_id = self._sandbox_theme_debug
-            logger.info("🎨 V2 sandbox color theme: %s (debug)", theme_id)
+            logger.info("🎨 V2 color theme: %s (debug)", theme_id)
         else:
             theme_id = int(np.random.randint(1, 6))
-            logger.info("🎨 V2 sandbox color theme: %s", theme_id)
+            logger.info("🎨 V2 color theme: %s", theme_id)
         html_content = re.sub(
             r"<body\b[^>]*>",
             f'<body class="v2-capture v2-theme-{theme_id}">',
@@ -476,45 +484,58 @@ function finalize(success) {
     callback(success);
 }
 
-const video = document.getElementById('mediaVideo');
-if (!video) {
-    finalize(true);
-    return;
+function seekVideoTo(video, targetTime, done) {
+    if (!video) {
+        done(true);
+        return;
+    }
+    const videoDuration = isFinite(video.duration) && video.duration > 0
+        ? Math.max(0, video.duration - 0.032)
+        : targetTime;
+    const t = Math.min(Math.max(0, targetTime), videoDuration);
+    const cleanup = () => {
+        video.onseeked = null;
+        video.onloadeddata = null;
+        video.ontimeupdate = null;
+    };
+    video.pause();
+    const seekTimeout = setTimeout(() => {
+        cleanup();
+        done(true);
+    }, 200);
+    video.onseeked = () => {
+        clearTimeout(seekTimeout);
+        cleanup();
+        done(true);
+    };
+    try {
+        video.currentTime = t;
+        video.pause();
+    } catch (err) {
+        console.error('Video seek error', err);
+        clearTimeout(seekTimeout);
+        cleanup();
+        done(false);
+    }
 }
 
-const videoDuration = isFinite(video.duration) && video.duration > 0
-    ? Math.max(0, video.duration - 0.032)
-    : clampedTime;
-const targetTime = Math.min(clampedTime, videoDuration);
+const carouselVid = document.querySelector('#mediaCarousel.carousel.is-active .carousel-slide.is-active video');
+const mainVideo = document.getElementById('mediaVideo');
 
-const cleanup = () => {
-    video.onseeked = null;
-    video.onloadeddata = null;
-    video.ontimeupdate = null;
-};
-
-video.pause();
-
-const seekTimeout = setTimeout(() => {
-    cleanup();
+if (carouselVid) {
+    const total = (window.__cinematicDuration && window.__cinematicDuration > 0)
+        ? window.__cinematicDuration : 6;
+    const slides = document.querySelectorAll('#mediaCarousel .carousel-slide');
+    const n = Math.max(1, slides.length);
+    const slideSec = total / n;
+    let idx = Math.floor(clampedTime / slideSec);
+    if (idx >= n) idx = n - 1;
+    const localT = Math.max(0, clampedTime - idx * slideSec);
+    seekVideoTo(carouselVid, localT, finalize);
+} else if (mainVideo && mainVideo.style.display !== 'none') {
+    seekVideoTo(mainVideo, clampedTime, finalize);
+} else {
     finalize(true);
-}, 200);
-
-video.onseeked = () => {
-    clearTimeout(seekTimeout);
-    cleanup();
-    finalize(true);
-};
-
-try {
-    video.currentTime = targetTime;
-    // Принудительно останавливаем воспроизведение
-    video.pause();
-} catch (err) {
-    console.error('Video seek error', err);
-    clearTimeout(seekTimeout);
-    cleanup();
-    finalize(false);
 }
                 """,
                 frame_time,

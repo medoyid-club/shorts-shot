@@ -23,6 +23,16 @@
             font-family: 'Noto Sans', system-ui, sans-serif;
             color: #f4f4f5;
             position: relative;
+            /* Тема 1 (default): золото + красный маркер заголовка */
+            --accent: #e8c547;
+            --accent-soft: rgba(232, 197, 71, 0.28);
+            --accent-rule: rgba(212, 34, 34, 0.65);
+            --title-mark-a: #d42222;
+            --title-mark-b: #e02a2a;
+            --title-mark-c: #c41e1e;
+            --quote-mark: rgba(232, 197, 71, 0.96);
+            --chyron-bg: rgba(10, 10, 14, 0.86);
+            --chyron-border: rgba(255, 255, 255, 0.09);
         }
 
         /* --- Full-bleed media --- */
@@ -167,7 +177,8 @@
             visibility: visible;
         }
 
-        .carousel-slide img {
+        .carousel-slide img,
+        .carousel-slide video {
             width: 100%;
             height: 100%;
             object-fit: cover;
@@ -175,7 +186,8 @@
             display: block;
         }
 
-        .media-layer[data-fit="contain"] .carousel-slide img {
+        .media-layer[data-fit="contain"] .carousel-slide img,
+        .media-layer[data-fit="contain"] .carousel-slide video {
             object-fit: cover;
             object-position: var(--media-focus, center 30%);
         }
@@ -208,7 +220,7 @@
         }
 
         .carousel-dots span.is-active {
-            background: #e8c547;
+            background: var(--accent);
             transform: scale(1.15);
         }
 
@@ -256,10 +268,10 @@
             gap: 22px;
             padding: 40px 44px 44px;
             border-radius: 22px;
-            background: rgba(10, 10, 14, 0.86);
+            background: var(--chyron-bg);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.09);
+            border: 1px solid var(--chyron-border);
             box-shadow:
                 0 28px 56px rgba(0, 0, 0, 0.5),
                 inset 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -274,7 +286,7 @@
             bottom: 32px;
             width: 4px;
             border-radius: 0 3px 3px 0;
-            background: #e8c547;
+            background: var(--accent);
             opacity: 0.95;
         }
 
@@ -285,8 +297,8 @@
             width: 10px;
             height: 10px;
             border-radius: 50%;
-            background: #e8c547;
-            box-shadow: 0 0 0 3px rgba(232, 197, 71, 0.28);
+            background: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-soft);
         }
 
         .title-block {
@@ -322,9 +334,9 @@
             background: linear-gradient(
                 180deg,
                 transparent 0.1em,
-                #d42222 0.1em,
-                #e02a2a 0.55em,
-                #c41e1e 1.05em,
+                var(--title-mark-a) 0.1em,
+                var(--title-mark-b) 0.55em,
+                var(--title-mark-c) 1.05em,
                 transparent 1.05em
             );
             box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.12);
@@ -337,7 +349,7 @@
             flex-shrink: 0;
             background: linear-gradient(
                 90deg,
-                rgba(212, 34, 34, 0.65),
+                var(--accent-rule),
                 rgba(255, 255, 255, 0.12) 40%,
                 rgba(255, 255, 255, 0)
             );
@@ -371,8 +383,8 @@
             background: linear-gradient(
                 180deg,
                 transparent 0.42em,
-                rgba(232, 197, 71, 0.96) 0.42em,
-                rgba(232, 197, 71, 0.96) 1.08em,
+                var(--quote-mark) 0.42em,
+                var(--quote-mark) 1.08em,
                 transparent 1.08em
             );
             border-radius: 2px;
@@ -384,6 +396,58 @@
         .spinner,
         .loader {
             display: none;
+        }
+
+        /*
+         * П’ять кольорових тем (v2-theme-1 … 5) — випадковий вибір у video_generator_v2.
+         * Базові CSS-змінні вище = тема 1.
+         */
+        body.v2-theme-2 {
+            --accent: #38bdf8;
+            --accent-soft: rgba(56, 189, 248, 0.32);
+            --accent-rule: rgba(14, 165, 233, 0.7);
+            --title-mark-a: #0284c7;
+            --title-mark-b: #0ea5e9;
+            --title-mark-c: #0369a1;
+            --quote-mark: rgba(125, 211, 252, 0.95);
+            --chyron-bg: rgba(8, 16, 28, 0.88);
+            --chyron-border: rgba(56, 189, 248, 0.16);
+        }
+
+        body.v2-theme-3 {
+            --accent: #fb923c;
+            --accent-soft: rgba(251, 146, 60, 0.32);
+            --accent-rule: rgba(234, 88, 12, 0.7);
+            --title-mark-a: #c2410c;
+            --title-mark-b: #ea580c;
+            --title-mark-c: #9a3412;
+            --quote-mark: rgba(253, 186, 116, 0.95);
+            --chyron-bg: rgba(22, 12, 8, 0.88);
+            --chyron-border: rgba(251, 146, 60, 0.16);
+        }
+
+        body.v2-theme-4 {
+            --accent: #4ade80;
+            --accent-soft: rgba(74, 222, 128, 0.3);
+            --accent-rule: rgba(22, 163, 74, 0.7);
+            --title-mark-a: #15803d;
+            --title-mark-b: #22c55e;
+            --title-mark-c: #166534;
+            --quote-mark: rgba(134, 239, 172, 0.95);
+            --chyron-bg: rgba(8, 18, 12, 0.88);
+            --chyron-border: rgba(74, 222, 128, 0.15);
+        }
+
+        body.v2-theme-5 {
+            --accent: #c084fc;
+            --accent-soft: rgba(192, 132, 252, 0.32);
+            --accent-rule: rgba(147, 51, 234, 0.7);
+            --title-mark-a: #7c3aed;
+            --title-mark-b: #a855f7;
+            --title-mark-c: #6d28d9;
+            --quote-mark: rgba(216, 180, 254, 0.95);
+            --chyron-bg: rgba(14, 8, 22, 0.88);
+            --chyron-border: rgba(192, 132, 252, 0.16);
         }
     </style>
 </head>
@@ -584,30 +648,61 @@
             const videoSrc = videoSource ? videoSource.getAttribute('src') : '';
             const imageSrc = mediaImage.getAttribute('src');
 
-            let carouselUris = [];
+            let carouselItems = [];
             try {
                 const cel = document.getElementById('carousel-images-json');
                 if (cel && cel.textContent && cel.textContent.trim() && cel.textContent.trim() !== '[]') {
-                    carouselUris = JSON.parse(cel.textContent);
+                    carouselItems = JSON.parse(cel.textContent);
                 }
             } catch (e) {
                 console.warn('carousel-images-json parse failed', e);
             }
-            if (!Array.isArray(carouselUris)) carouselUris = [];
+            if (!Array.isArray(carouselItems)) carouselItems = [];
+
+            function normalizeCarouselItem(raw) {
+                if (!raw) return null;
+                if (typeof raw === 'string') {
+                    const lower = raw.toLowerCase();
+                    const isVideo = /\.(mp4|webm|mov|mkv)(\?|$)/.test(lower);
+                    return { src: raw, type: isVideo ? 'video' : 'image' };
+                }
+                if (typeof raw === 'object' && raw.src) {
+                    const t = (raw.type === 'video') ? 'video' : 'image';
+                    return { src: raw.src, type: t };
+                }
+                return null;
+            }
 
             let motionTarget = null;
 
-            function setupCarousel(uris) {
-                if (!carousel || uris.length < 2) return false;
+            function setupCarousel(items) {
+                if (!carousel || !items || items.length < 2) return false;
+                const normalized = items.map(normalizeCarouselItem).filter(Boolean);
+                if (normalized.length < 2) return false;
+
                 carousel.innerHTML = '';
                 if (carouselDots) carouselDots.innerHTML = '';
-                uris.forEach(function (uri, i) {
+                normalized.forEach(function (item, i) {
                     const slide = document.createElement('div');
                     slide.className = 'carousel-slide' + (i === 0 ? ' is-active' : '');
-                    const img = document.createElement('img');
-                    img.src = uri;
-                    img.alt = '';
-                    slide.appendChild(img);
+                    slide.setAttribute('data-media-type', item.type);
+                    if (item.type === 'video') {
+                        const vid = document.createElement('video');
+                        vid.muted = true;
+                        vid.playsInline = true;
+                        vid.preload = 'auto';
+                        vid.setAttribute('playsinline', '');
+                        const src = document.createElement('source');
+                        src.src = item.src;
+                        src.type = 'video/mp4';
+                        vid.appendChild(src);
+                        slide.appendChild(vid);
+                    } else {
+                        const img = document.createElement('img');
+                        img.src = item.src;
+                        img.alt = '';
+                        slide.appendChild(img);
+                    }
                     carousel.appendChild(slide);
                     if (carouselDots) {
                         const dot = document.createElement('span');
@@ -621,11 +716,30 @@
                 mediaVideo.style.display = 'none';
                 placeholder.classList.remove('is-visible');
 
-                // Blur = первое фото (статика)
+                // Blur backdrop from first slide
+                const first = normalized[0];
                 const blurImage = document.getElementById('blurImage');
-                if (blurImage && uris[0]) {
-                    blurImage.src = uris[0];
+                const blurVideo = document.getElementById('blurVideo');
+                if (first.type === 'image' && blurImage) {
+                    blurImage.src = first.src;
                     blurImage.style.display = 'block';
+                    if (blurVideo) blurVideo.style.display = 'none';
+                } else if (first.type === 'video' && blurVideo) {
+                    const bsrc = blurVideo.querySelector('source');
+                    if (bsrc) bsrc.src = first.src;
+                    try { blurVideo.load(); } catch (err) {}
+                    blurVideo.style.display = 'block';
+                    if (blurImage) blurImage.style.display = 'none';
+                    const freezeBlur = function() {
+                        try {
+                            blurVideo.pause();
+                            const d = blurVideo.duration;
+                            const t = (isFinite(d) && d > 0.6) ? Math.min(0.5, d * 0.25) : 0.05;
+                            blurVideo.currentTime = t;
+                        } catch (err) {}
+                    };
+                    blurVideo.addEventListener('loadeddata', freezeBlur);
+                    if (blurVideo.readyState >= 2) freezeBlur();
                 }
 
                 window.__syncCarousel = function (t) {
@@ -640,8 +754,23 @@
                     let idx = Math.floor(Math.max(0, t) / slideSec);
                     if (idx >= n) idx = n - 1;
                     if (idx < 0) idx = 0;
+                    const localT = Math.max(0, t - idx * slideSec);
                     slides.forEach(function (el, i) {
-                        el.classList.toggle('is-active', i === idx);
+                        const on = i === idx;
+                        el.classList.toggle('is-active', on);
+                        const vid = el.querySelector('video');
+                        if (vid) {
+                            try {
+                                vid.pause();
+                                if (on && isFinite(vid.duration) && vid.duration > 0) {
+                                    const cap = Math.max(0, vid.duration - 0.032);
+                                    const nt = Math.min(localT, cap);
+                                    if (Math.abs((vid.currentTime || 0) - nt) > 0.04) {
+                                        vid.currentTime = nt;
+                                    }
+                                }
+                            } catch (err) {}
+                        }
                     });
                     dots.forEach(function (el, i) {
                         el.classList.toggle('is-active', i === idx);
@@ -651,7 +780,7 @@
                 return true;
             }
 
-            if (setupCarousel(carouselUris)) {
+            if (setupCarousel(carouselItems)) {
                 motionTarget = carousel;
                 setupCinematicMotion(carousel);
             } else if (videoSrc) {
